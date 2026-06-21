@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.traffic.mapper.VehicleControlAlertMapper">
+
+    <resultMap id="VehicleControlAlertMap" type="com.police.vision.common.entity.VehicleControlAlert">
+        <id column="id" property="id"/>
+        <result column="alert_no" property="alertNo"/>
+        <result column="control_id" property="controlId"/>
+        <result column="control_no" property="controlNo"/>
+        <result column="control_name" property="controlName"/>
+        <result column="control_level" property="controlLevel"/>
+        <result column="alert_type" property="alertType"/>
+        <result column="alert_name" property="alertName"/>
+        <result column="alert_level" property="alertLevel"/>
+        <result column="plate_no" property="plateNo"/>
+        <result column="plate_color" property="plateColor"/>
+        <result column="vehicle_type" property="vehicleType"/>
+        <result column="vehicle_color" property="vehicleColor"/>
+        <result column="vehicle_brand" property="vehicleBrand"/>
+        <result column="crossing_id" property="crossingId"/>
+        <result column="crossing_name" property="crossingName"/>
+        <result column="camera_id" property="cameraId"/>
+        <result column="camera_name" property="cameraName"/>
+        <result column="lane_no" property="laneNo"/>
+        <result column="speed" property="speed"/>
+        <result column="direction" property="direction"/>
+        <result column="longitude" property="longitude"/>
+        <result column="latitude" property="latitude"/>
+        <result column="image_url" property="imageUrl"/>
+        <result column="plate_image_url" property="plateImageUrl"/>
+        <result column="capture_time" property="captureTime"/>
+        <result column="alert_time" property="alertTime"/>
+        <result column="description" property="description"/>
+        <result column="status" property="status"/>
+        <result column="handler_id" property="handlerId"/>
+        <result column="handler_name" property="handlerName"/>
+        <result column="handle_time" property="handleTime"/>
+        <result column="handle_result" property="handleResult"/>
+        <result column="handle_remark" property="handleRemark"/>
+        <result column="push_status" property="pushStatus"/>
+        <result column="push_time" property="pushTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="create_by" property="createBy"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="selectByPlateNoAndTime" resultMap="VehicleControlAlertMap">
+        SELECT * FROM vehicle_control_alert
+        WHERE plate_no = #{plateNo}
+        AND capture_time BETWEEN #{startTime} AND #{endTime}
+        AND deleted = 0
+        ORDER BY capture_time DESC
+    </select>
+
+    <select id="selectByControlId" resultMap="VehicleControlAlertMap">
+        SELECT * FROM vehicle_control_alert
+        WHERE control_id = #{controlId} AND deleted = 0
+        ORDER BY alert_time DESC
+    </select>
+
+    <select id="countTodayByPlateNo" resultType="int">
+        SELECT COUNT(*) FROM vehicle_control_alert
+        WHERE plate_no = #{plateNo}
+        AND DATE(alert_time) = CURDATE()
+        AND deleted = 0
+    </select>
+
+</mapper>

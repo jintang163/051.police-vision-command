@@ -8,6 +8,9 @@ flink:
   job:
     name: PoliceVisionFlinkJob
     parallelism: 4
+    name-server: 127.0.0.1:9876
+    face-capture-topic: police-face-recognition-topic
+    websocket-push-topic: police-websocket-push-topic
     checkpoint:
       enabled: true
       interval: 60000
@@ -15,6 +18,11 @@ flink:
     state:
       backend: filesystem
       path: hdfs://localhost:9000/flink/checkpoints
+    kafka:
+      bootstrap-servers: 127.0.0.1:9092
+      traffic-capture-topic: traffic-capture-topic
+      vehicle-control-alert-topic: vehicle-control-alert-topic
+      consumer-group: flink-traffic-consumer-group
 
 rocketmq:
   name-server: 127.0.0.1:9876

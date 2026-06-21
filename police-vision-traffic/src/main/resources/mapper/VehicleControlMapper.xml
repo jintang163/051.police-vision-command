@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.traffic.mapper.VehicleControlMapper">
+
+    <resultMap id="VehicleControlMap" type="com.police.vision.common.entity.VehicleControl">
+        <id column="id" property="id"/>
+        <result column="control_no" property="controlNo"/>
+        <result column="control_name" property="controlName"/>
+        <result column="control_type" property="controlType"/>
+        <result column="control_level" property="controlLevel"/>
+        <result column="plate_no" property="plateNo"/>
+        <result column="plate_color" property="plateColor"/>
+        <result column="vehicle_type" property="vehicleType"/>
+        <result column="vehicle_color" property="vehicleColor"/>
+        <result column="vehicle_brand" property="vehicleBrand"/>
+        <result column="area_code" property="areaCode"/>
+        <result column="area_name" property="areaName"/>
+        <result column="crossing_ids" property="crossingIds"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="time_rules" property="timeRules"/>
+        <result column="control_reason" property="controlReason"/>
+        <result column="status" property="status"/>
+        <result column="warning_count" property="warningCount"/>
+        <result column="last_warning_time" property="lastWarningTime"/>
+        <result column="description" property="description"/>
+        <result column="create_dept_id" property="createDeptId"/>
+        <result column="create_user_id" property="createUserId"/>
+        <result column="approve_user_id" property="approveUserId"/>
+        <result column="approve_time" property="approveTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="create_by" property="createBy"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="selectActiveControls" resultMap="VehicleControlMap">
+        SELECT * FROM vehicle_control
+        WHERE status = 1 AND deleted = 0
+        AND (start_time IS NULL OR start_time &lt;= NOW())
+        AND (end_time IS NULL OR end_time &gt;= NOW())
+        ORDER BY control_level DESC
+    </select>
+
+    <select id="selectByPlateNo" resultMap="VehicleControlMap">
+        SELECT * FROM vehicle_control
+        WHERE plate_no = #{plateNo} AND deleted = 0
+        ORDER BY control_level DESC
+    </select>
+
+    <select id="selectByCondition" resultMap="VehicleControlMap">
+        SELECT * FROM vehicle_control
+        WHERE deleted = 0
+        <if test="areaCode != null and areaCode != ''">
+            AND area_code = #{areaCode}
+        </if>
+        <if test="vehicleType != null and vehicleType != ''">
+            AND vehicle_type = #{vehicleType}
+        </if>
+        <if test="vehicleColor != null and vehicleColor != ''">
+            AND vehicle_color = #{vehicleColor}
+        </if>
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+        ORDER BY control_level DESC
+    </select>
+
+</mapper>

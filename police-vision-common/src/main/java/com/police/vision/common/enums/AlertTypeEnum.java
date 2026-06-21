@@ -16,7 +16,10 @@ public enum AlertTypeEnum {
     ABNORMAL_BEHAVIOR(7, "异常行为检测", 3),
     FIRE_DETECTED(8, "烟雾火灾检测", 1),
     FENCE_BREACH(9, "电子围栏告警", 1),
-    AGGREGATION(10, "异常聚集告警", 2);
+    AGGREGATION(10, "异常聚集告警", 2),
+    VEHICLE_CONTROL(11, "车辆布控告警", 1),
+    VEHICLE_FOLLOW(12, "跟车分析告警", 2),
+    VEHICLE_NIGHT_ACTIVE(13, "昼伏夜出车辆告警", 2);
 
     private final Integer code;
     private final String name;

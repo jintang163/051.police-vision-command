@@ -22,6 +22,7 @@
         <module>police-vision-flink</module>
         <module>police-vision-mobile</module>
         <module>police-vision-control</module>
+        <module>police-vision-traffic</module>
     </modules>
 
     <properties>
