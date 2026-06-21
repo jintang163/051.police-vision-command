@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.control.mapper.FenceAlertMapper">
+
+    <select id="selectByAlertId" resultType="com.police.vision.control.entity.FenceAlert">
+        SELECT * FROM fence_alert WHERE alert_id = #{alertId} AND deleted = 0 LIMIT 1
+    </select>
+
+    <select id="selectByPersonId" resultType="com.police.vision.control.entity.FenceAlert">
+        SELECT * FROM fence_alert WHERE person_id = #{personId} AND deleted = 0 ORDER BY alert_time DESC
+    </select>
+
+    <select id="selectByFenceId" resultType="com.police.vision.control.entity.FenceAlert">
+        SELECT * FROM fence_alert WHERE fence_id = #{fenceId} AND deleted = 0 ORDER BY alert_time DESC
+    </select>
+
+    <select id="selectByStatus" resultType="com.police.vision.control.entity.FenceAlert">
+        SELECT * FROM fence_alert WHERE status = #{status} AND deleted = 0 ORDER BY alert_time DESC
+    </select>
+
+    <select id="selectActiveAlert" resultType="com.police.vision.control.entity.FenceAlert">
+        SELECT * FROM fence_alert
+        WHERE person_id = #{personId} AND fence_id = #{fenceId} AND status = 0 AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectByTimeRange" resultType="com.police.vision.control.entity.FenceAlert">
+        SELECT * FROM fence_alert
+        WHERE alert_time BETWEEN #{start} AND #{end} AND deleted = 0
+        ORDER BY alert_time DESC
+    </select>
+
+</mapper>

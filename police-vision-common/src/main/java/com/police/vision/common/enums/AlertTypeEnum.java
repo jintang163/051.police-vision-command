@@ -14,7 +14,9 @@ public enum AlertTypeEnum {
     FALL_DETECTED(5, "人员倒地检测", 2),
     TRESSPASSING(6, "区域入侵检测", 2),
     ABNORMAL_BEHAVIOR(7, "异常行为检测", 3),
-    FIRE_DETECTED(8, "烟雾火灾检测", 1);
+    FIRE_DETECTED(8, "烟雾火灾检测", 1),
+    FENCE_BREACH(9, "电子围栏告警", 1),
+    AGGREGATION(10, "异常聚集告警", 2);
 
     private final Integer code;
     private final String name;

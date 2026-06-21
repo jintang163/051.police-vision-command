@@ -180,10 +180,17 @@ public class FaceRecognitionService {
             record.setDetectTime(LocalDateTime.now());
         }
         faceRecordMapper.insert(record);
+
+        CameraDevice camera = cameraDeviceMapper.selectByDeviceId(record.getCameraId());
+        String cameraName = camera != null ? camera.getDeviceName() : "";
+        BigDecimal cameraLng = camera != null ? camera.getLongitude() : null;
+        BigDecimal cameraLat = camera != null ? camera.getLatitude() : null;
+
+        publishFaceCaptureEvent(record, cameraName, cameraLng, cameraLat);
+
         if (record.getPersonId() != null) {
             TargetPerson target = targetPersonMapper.selectByPersonId(record.getPersonId());
             if (target != null && target.getStatus() == 1) {
-                CameraDevice camera = cameraDeviceMapper.selectByDeviceId(record.getCameraId());
 
                 VideoStorage videoClip = null;
                 try {
@@ -202,7 +209,7 @@ public class FaceRecognitionService {
                 alert.setAlertName(AlertTypeEnum.FACE_MATCH.getName());
                 alert.setAlertLevel(target.getControlLevel());
                 alert.setCameraId(record.getCameraId());
-                alert.setCameraName(camera != null ? camera.getDeviceName() : "");
+                alert.setCameraName(cameraName);
                 alert.setLongitude(record.getLongitude());
                 alert.setLatitude(record.getLatitude());
                 alert.setDescription("重点人员人脸识别告警：" + record.getPersonName() +
@@ -229,7 +236,7 @@ public class FaceRecognitionService {
                 controlMsg.put("personId", record.getPersonId());
                 controlMsg.put("personName", record.getPersonName());
                 controlMsg.put("cameraId", record.getCameraId());
-                controlMsg.put("cameraName", camera != null ? camera.getDeviceName() : "");
+                controlMsg.put("cameraName", cameraName);
                 controlMsg.put("longitude", record.getLongitude());
                 controlMsg.put("latitude", record.getLatitude());
                 controlMsg.put("snapshotUrl", record.getSnapshotUrl());
@@ -253,5 +260,63 @@ public class FaceRecognitionService {
             record.setDetectTime(LocalDateTime.now());
         }
         faceRecordMapper.insert(record);
+
+        CameraDevice camera = cameraDeviceMapper.selectByDeviceId(record.getCameraId());
+        String cameraName = camera != null ? camera.getDeviceName() : "";
+        BigDecimal cameraLng = camera != null ? camera.getLongitude() : null;
+        BigDecimal cameraLat = camera != null ? camera.getLatitude() : null;
+        publishFaceCaptureEvent(record, cameraName, cameraLng, cameraLat);
+    }
+
+    private void publishFaceCaptureEvent(FaceRecord record, String cameraName,
+                                          BigDecimal cameraLng, BigDecimal cameraLat) {
+        try {
+            Map<String, Object> event = new HashMap<>();
+            event.put("captureId", record.getRecordId());
+            event.put("personId", record.getPersonId());
+            event.put("personName", record.getPersonName());
+            event.put("cameraId", record.getCameraId());
+            event.put("cameraName", cameraName);
+            event.put("longitude", record.getLongitude() != null ? record.getLongitude() : cameraLng);
+            event.put("latitude", record.getLatitude() != null ? record.getLatitude() : cameraLat);
+            event.put("eventTime", record.getDetectTime() != null ? record.getDetectTime().toString() : LocalDateTime.now().toString());
+            event.put("timestamp", System.currentTimeMillis());
+            event.put("similarity", record.getSimilarity());
+
+            boolean isTarget = record.getPersonId() != null;
+            event.put("isTargetPerson", isTarget);
+
+            if (isTarget) {
+                TargetPerson target = targetPersonMapper.selectByPersonId(record.getPersonId());
+                if (target != null) {
+                    event.put("personType", target.getPersonType());
+                    event.put("controlLevel", target.getControlLevel());
+                }
+            }
+
+            String gridCode = calculateGridCode(
+                    record.getLongitude() != null ? record.getLongitude() : cameraLng,
+                    record.getLatitude() != null ? record.getLatitude() : cameraLat);
+            event.put("gridCode", gridCode);
+            event.put("areaCode", gridCode);
+
+            mqUtil.sendOneway(
+                    MqConstant.FACE_RECOGNITION_TOPIC + ":face_capture",
+                    event);
+
+            log.debug("已发布FaceCaptureEvent到MQ：personId={}, cameraId={}, gridCode={}",
+                    record.getPersonId(), record.getCameraId(), gridCode);
+        } catch (Exception e) {
+            log.error("发布FaceCaptureEvent失败：recordId={}", record.getRecordId(), e);
+        }
+    }
+
+    private String calculateGridCode(BigDecimal longitude, BigDecimal latitude) {
+        if (longitude == null || latitude == null) return "GRID_DEFAULT";
+        double lng = longitude.doubleValue();
+        double lat = latitude.doubleValue();
+        int lngIdx = (int) ((lng + 180.0) * 100);
+        int latIdx = (int) ((lat + 90.0) * 100);
+        return "GRID_" + lngIdx + "_" + latIdx;
     }
 }

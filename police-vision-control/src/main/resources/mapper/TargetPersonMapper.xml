@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.control.mapper.TargetPersonMapper">
+
+    <select id="selectByPersonId" resultType="com.police.vision.control.entity.TargetPerson">
+        SELECT * FROM target_person WHERE person_id = #{personId} AND deleted = 0 LIMIT 1
+    </select>
+
+    <select id="selectByIdCardNo" resultType="com.police.vision.control.entity.TargetPerson">
+        SELECT * FROM target_person WHERE id_card_no = #{idCardNo} AND deleted = 0 LIMIT 1
+    </select>
+
+    <select id="selectByStatus" resultType="com.police.vision.control.entity.TargetPerson">
+        SELECT * FROM target_person WHERE status = #{status} AND deleted = 0 ORDER BY update_time DESC
+    </select>
+
+    <select id="selectByPersonType" resultType="com.police.vision.control.entity.TargetPerson">
+        SELECT * FROM target_person WHERE person_type = #{personType} AND deleted = 0 ORDER BY update_time DESC
+    </select>
+
+    <select id="selectByStationCode" resultType="com.police.vision.control.entity.TargetPerson">
+        SELECT * FROM target_person WHERE police_station_code = #{stationCode} AND deleted = 0 ORDER BY update_time DESC
+    </select>
+
+</mapper>

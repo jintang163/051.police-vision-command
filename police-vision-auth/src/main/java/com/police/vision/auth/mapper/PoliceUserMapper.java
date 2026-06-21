@@ -9,6 +9,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface PoliceUserMapper extends BaseMapper<PoliceUser> {
@@ -34,4 +35,11 @@ public interface PoliceUserMapper extends BaseMapper<PoliceUser> {
     @Select("SELECT id, police_no, name, phone, dept_id, dept_name, status, longitude, latitude " +
             "FROM sys_police_user WHERE dept_id = #{deptId} AND deleted = 0")
     List<PoliceUser> selectByDeptId(@Param("deptId") Long deptId);
+
+    @Select("SELECT u.id, u.police_number AS police_no, u.real_name AS name, u.phone, " +
+            "u.department_id AS dept_id, d.dept_name, u.status, u.longitude, u.latitude " +
+            "FROM sys_user u " +
+            "LEFT JOIN sys_department d ON u.department_id = d.id " +
+            "WHERE d.dept_code = #{stationCode} AND u.status = 1 AND u.deleted = 0")
+    List<Map<String, Object>> selectByStationCode(@Param("stationCode") String stationCode);
 }

@@ -35,6 +35,7 @@ public class TargetPersonProfileService {
     private final TargetPersonRepository targetPersonRepository;
     private final CriminalRecordRepository criminalRecordRepository;
     private final FenceAlertMapper fenceAlertMapper;
+    private final PersonRelationMapper personRelationMapper;
     private final RedisUtil redisUtil;
 
     private static final Map<String, Long> FACE_COOLDOWN = new ConcurrentHashMap<>();
@@ -67,7 +68,16 @@ public class TargetPersonProfileService {
                 person.getPersonId(), person.getPersonName(), person.getPersonType());
     }
 
+    private volatile boolean neo4jAvailable = true;
+    private volatile long lastNeo4jCheckTime = 0;
+    private static final long NEO4J_CHECK_INTERVAL_MS = 30_000;
+
     public void syncToNeo4j(TargetPerson person) {
+        if (!isNeo4jAvailable()) {
+            log.warn("Neo4j不可用，写入补偿队列：personId={}", person.getPersonId());
+            enqueueNeo4jSync(person.getPersonId());
+            return;
+        }
         try {
             Optional<TargetPersonNode> opt = targetPersonRepository.findByPersonId(person.getPersonId());
             TargetPersonNode node = opt.orElse(new TargetPersonNode());
@@ -84,93 +94,157 @@ public class TargetPersonProfileService {
             node.setRemark(person.getRemark());
             node.setRiskScore(person.getRiskScore());
             targetPersonRepository.save(node);
+            neo4jAvailable = true;
             log.debug("同步重点人员到Neo4j：personId={}", person.getPersonId());
         } catch (Exception e) {
-            log.warn("同步重点人员到Neo4j失败（Neo4j可能未启动）：{}", e.getMessage());
+            neo4jAvailable = false;
+            lastNeo4jCheckTime = System.currentTimeMillis();
+            log.warn("同步重点人员到Neo4j失败，写入补偿队列：personId={}, error={}", person.getPersonId(), e.getMessage());
+            enqueueNeo4jSync(person.getPersonId());
+        }
+    }
+
+    private boolean isNeo4jAvailable() {
+        if (neo4jAvailable) return true;
+        long now = System.currentTimeMillis();
+        if (now - lastNeo4jCheckTime < NEO4J_CHECK_INTERVAL_MS) return false;
+        try {
+            targetPersonRepository.count();
+            neo4jAvailable = true;
+            lastNeo4jCheckTime = now;
+            log.info("Neo4j恢复可用");
+            return true;
+        } catch (Exception e) {
+            lastNeo4jCheckTime = now;
+            return false;
+        }
+    }
+
+    private void enqueueNeo4jSync(String personId) {
+        try {
+            String key = "neo4j:sync:queue";
+            redisUtil.setObject(key + ":" + personId, personId, 24, TimeUnit.HOURS);
+        } catch (Exception e) {
+            log.error("写入Neo4j补偿队列失败：personId={}", personId, e);
         }
     }
 
     @Transactional(rollbackFor = Exception.class)
     public void addCoCaseRelation(String personId1, String personId2,
                                    String caseId, String caseName, String description) {
-        try {
-            Optional<TargetPersonNode> p1Opt = targetPersonRepository.findByPersonId(personId1);
-            Optional<TargetPersonNode> p2Opt = targetPersonRepository.findByPersonId(personId2);
-            if (p1Opt.isEmpty() || p2Opt.isEmpty()) {
-                throw new BusinessException(ResultCode.DATA_NOT_FOUND, "关联人员不存在");
+        TargetPerson p1 = targetPersonMapper.selectByPersonId(personId1);
+        TargetPerson p2 = targetPersonMapper.selectByPersonId(personId2);
+        if (p1 == null || p2 == null) {
+            throw new BusinessException(ResultCode.DATA_NOT_FOUND, "关联人员不存在");
+        }
+
+        saveRelationToMysql(personId1, personId2, "CO_CASE", "同案人员",
+                caseId, caseName, description, 0, 80);
+
+        if (isNeo4jAvailable()) {
+            try {
+                syncRelationToNeo4j(personId1, personId2, "CO_CASE", "同案人员",
+                        caseId, caseName, description, 80);
+                log.info("添加同案关系(Neo4j+MySQL)：{} <-> {}，案件：{}", personId1, personId2, caseName);
+            } catch (Exception e) {
+                log.warn("同案关系写入Neo4j失败(已存MySQL可补偿)：{}", e.getMessage());
             }
-            TargetPersonNode p1 = p1Opt.get();
-            TargetPersonNode p2 = p2Opt.get();
-
-            PersonRelationship rel = new PersonRelationship();
-            rel.setTargetPerson(p2);
-            rel.setRelationType("CO_CASE");
-            rel.setRelationName("同案人员");
-            rel.setCaseId(caseId);
-            rel.setCaseName(caseName);
-            rel.setDescription(description);
-            rel.setFirstContactDate(LocalDate.now());
-            rel.setStrength(80);
-            p1.getCoCaseRelations().add(rel);
-
-            PersonRelationship reverse = new PersonRelationship();
-            reverse.setTargetPerson(p1);
-            reverse.setRelationType("CO_CASE");
-            reverse.setRelationName("同案人员");
-            reverse.setCaseId(caseId);
-            reverse.setCaseName(caseName);
-            reverse.setDescription(description);
-            reverse.setFirstContactDate(LocalDate.now());
-            reverse.setStrength(80);
-            p2.getCoCaseRelations().add(reverse);
-
-            targetPersonRepository.save(p1);
-            targetPersonRepository.save(p2);
-            log.info("添加同案关系：{} <-> {}，案件：{}", personId1, personId2, caseName);
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            log.warn("添加同案关系失败（Neo4j可能未启动）：{}", e.getMessage());
+        } else {
+            log.info("添加同案关系(MySQL降级)：{} <-> {}，案件：{}", personId1, personId2, caseName);
         }
     }
 
     @Transactional(rollbackFor = Exception.class)
     public void addFrequentContact(String personId1, String personId2,
                                     int contactCount, int strength) {
+        TargetPerson p1 = targetPersonMapper.selectByPersonId(personId1);
+        TargetPerson p2 = targetPersonMapper.selectByPersonId(personId2);
+        if (p1 == null || p2 == null) {
+            throw new BusinessException(ResultCode.DATA_NOT_FOUND, "关联人员不存在");
+        }
+
+        saveRelationToMysql(personId1, personId2, "FREQUENT_CONTACT", "频繁联系人",
+                null, null, null, contactCount, strength);
+
+        if (isNeo4jAvailable()) {
+            try {
+                syncRelationToNeo4j(personId1, personId2, "FREQUENT_CONTACT", "频繁联系人",
+                        null, null, null, strength);
+                log.info("添加频繁联系人关系(Neo4j+MySQL)：{} <-> {}，联系次数：{}", personId1, personId2, contactCount);
+            } catch (Exception e) {
+                log.warn("频繁联系人关系写入Neo4j失败(已存MySQL可补偿)：{}", e.getMessage());
+            }
+        } else {
+            log.info("添加频繁联系人关系(MySQL降级)：{} <-> {}", personId1, personId2);
+        }
+    }
+
+    private void saveRelationToMysql(String personId1, String personId2, String relationType,
+                                      String relationName, String caseId, String caseName,
+                                      String description, int contactCount, int strength) {
+        PersonRelation rel = new PersonRelation();
+        rel.setId(SnowflakeIdUtil.nextId());
+        rel.setRelationId("REL" + SnowflakeIdUtil.nextId());
+        rel.setPersonId1(personId1);
+        rel.setPersonId2(personId2);
+        rel.setRelationType(relationType);
+        rel.setRelationName(relationName);
+        rel.setCaseId(caseId);
+        rel.setCaseName(caseName);
+        rel.setDescription(description);
+        rel.setContactCount(contactCount);
+        rel.setStrength(strength);
+        rel.setFirstContactDate(LocalDate.now());
+        rel.setLastContactDate(LocalDate.now());
+        rel.setSyncedToNeo4j(false);
+        personRelationMapper.insert(rel);
+    }
+
+    private void syncRelationToNeo4j(String personId1, String personId2, String relationType,
+                                       String relationName, String caseId, String caseName,
+                                       String description, int strength) {
         try {
             Optional<TargetPersonNode> p1Opt = targetPersonRepository.findByPersonId(personId1);
             Optional<TargetPersonNode> p2Opt = targetPersonRepository.findByPersonId(personId2);
-            if (p1Opt.isEmpty() || p2Opt.isEmpty()) {
-                throw new BusinessException(ResultCode.DATA_NOT_FOUND, "关联人员不存在");
-            }
+            if (p1Opt.isEmpty() || p2Opt.isEmpty()) return;
+
             TargetPersonNode p1 = p1Opt.get();
             TargetPersonNode p2 = p2Opt.get();
 
             PersonRelationship rel = new PersonRelationship();
             rel.setTargetPerson(p2);
-            rel.setRelationType("FREQUENT_CONTACT");
-            rel.setRelationName("频繁联系人");
-            rel.setContactCount(contactCount);
+            rel.setRelationType(relationType);
+            rel.setRelationName(relationName);
+            rel.setCaseId(caseId);
+            rel.setCaseName(caseName);
+            rel.setDescription(description);
             rel.setStrength(strength);
-            rel.setLastContactDate(LocalDate.now());
-            p1.getFrequentContactRelations().add(rel);
+            rel.setFirstContactDate(LocalDate.now());
 
             PersonRelationship reverse = new PersonRelationship();
             reverse.setTargetPerson(p1);
-            reverse.setRelationType("FREQUENT_CONTACT");
-            reverse.setRelationName("频繁联系人");
-            reverse.setContactCount(contactCount);
+            reverse.setRelationType(relationType);
+            reverse.setRelationName(relationName);
+            reverse.setCaseId(caseId);
+            reverse.setCaseName(caseName);
+            reverse.setDescription(description);
             reverse.setStrength(strength);
-            reverse.setLastContactDate(LocalDate.now());
-            p2.getFrequentContactRelations().add(reverse);
+            reverse.setFirstContactDate(LocalDate.now());
+
+            if ("CO_CASE".equals(relationType)) {
+                p1.getCoCaseRelations().add(rel);
+                p2.getCoCaseRelations().add(reverse);
+            } else if ("FREQUENT_CONTACT".equals(relationType)) {
+                rel.setLastContactDate(LocalDate.now());
+                reverse.setLastContactDate(LocalDate.now());
+                p1.getFrequentContactRelations().add(rel);
+                p2.getFrequentContactRelations().add(reverse);
+            }
 
             targetPersonRepository.save(p1);
             targetPersonRepository.save(p2);
-            log.info("添加频繁联系人关系：{} <-> {}，联系次数：{}", personId1, personId2, contactCount);
-        } catch (BusinessException e) {
-            throw e;
         } catch (Exception e) {
-            log.warn("添加频繁联系人关系失败（Neo4j可能未启动）：{}", e.getMessage());
+            throw new RuntimeException("Neo4j同步关系失败: " + e.getMessage(), e);
         }
     }
 
@@ -202,61 +276,53 @@ public class TargetPersonProfileService {
         centerNode.put("center", true);
         nodes.add(centerNode);
 
-        try {
-            List<TargetPersonNode> related = targetPersonRepository.findRelatedPersons(personId, limit);
-            if (related != null) {
-                for (TargetPersonNode relatedNode : related) {
-                    Map<String, Object> node = new HashMap<>();
-                    node.put("id", relatedNode.getPersonId());
-                    node.put("label", relatedNode.getPersonName());
-                    node.put("type", relatedNode.getPersonType());
-                    node.put("level", relatedNode.getControlLevel());
-                    node.put("riskScore", relatedNode.getRiskScore());
-                    nodes.add(node);
-                }
+        if (isNeo4jAvailable()) {
+            try {
+                List<TargetPersonNode> related = targetPersonRepository.findRelatedPersons(personId, limit);
+                if (related != null) {
+                    for (TargetPersonNode relatedNode : related) {
+                        Map<String, Object> node = new HashMap<>();
+                        node.put("id", relatedNode.getPersonId());
+                        node.put("label", relatedNode.getPersonName());
+                        node.put("type", relatedNode.getPersonType());
+                        node.put("level", relatedNode.getControlLevel());
+                        node.put("riskScore", relatedNode.getRiskScore());
+                        nodes.add(node);
+                    }
 
-                List<TargetPersonNode> coCases = targetPersonRepository.findCoCasePersons(personId, limit / 2);
-                if (coCases != null) {
-                    for (TargetPersonNode p : coCases) {
-                        Map<String, Object> edge = new HashMap<>();
-                        edge.put("source", personId);
-                        edge.put("target", p.getPersonId());
-                        edge.put("relation", "同案人员");
-                        edge.put("color", "#ff4d4f");
-                        edges.add(edge);
+                    List<TargetPersonNode> coCases = targetPersonRepository.findCoCasePersons(personId, limit / 2);
+                    if (coCases != null) {
+                        for (TargetPersonNode p : coCases) {
+                            Map<String, Object> edge = new HashMap<>();
+                            edge.put("source", personId);
+                            edge.put("target", p.getPersonId());
+                            edge.put("relation", "同案人员");
+                            edge.put("color", "#ff4d4f");
+                            edges.add(edge);
+                        }
+                    }
+
+                    List<TargetPersonNode> contacts = targetPersonRepository.findFrequentContacts(personId, limit / 2);
+                    if (contacts != null) {
+                        for (TargetPersonNode p : contacts) {
+                            Map<String, Object> edge = new HashMap<>();
+                            edge.put("source", personId);
+                            edge.put("target", p.getPersonId());
+                            edge.put("relation", "频繁联系");
+                            edge.put("color", "#faad14");
+                            edges.add(edge);
+                        }
                     }
                 }
-
-                List<TargetPersonNode> contacts = targetPersonRepository.findFrequentContacts(personId, limit / 2);
-                if (contacts != null) {
-                    for (TargetPersonNode p : contacts) {
-                        Map<String, Object> edge = new HashMap<>();
-                        edge.put("source", personId);
-                        edge.put("target", p.getPersonId());
-                        edge.put("relation", "频繁联系");
-                        edge.put("color", "#faad14");
-                        edges.add(edge);
-                    }
-                }
+            } catch (Exception e) {
+                log.warn("从Neo4j获取关系图谱失败，降级到MySQL关系表：{}", e.getMessage());
+                neo4jAvailable = false;
+                lastNeo4jCheckTime = System.currentTimeMillis();
+                buildMysqlRelationGraph(personId, limit, nodes, edges);
             }
-        } catch (Exception e) {
-            log.warn("从Neo4j获取关系图谱失败，使用默认关系：{}", e.getMessage());
-            List<TargetPerson> mockRelated = findMockRelated(personId);
-            for (TargetPerson r : mockRelated) {
-                Map<String, Object> node = new HashMap<>();
-                node.put("id", r.getPersonId());
-                node.put("label", r.getPersonName());
-                node.put("type", r.getPersonType());
-                node.put("level", r.getControlLevel());
-                nodes.add(node);
-
-                Map<String, Object> edge = new HashMap<>();
-                edge.put("source", personId);
-                edge.put("target", r.getPersonId());
-                edge.put("relation", Math.random() > 0.5 ? "同案人员" : "频繁联系");
-                edge.put("color", Math.random() > 0.5 ? "#ff4d4f" : "#faad14");
-                edges.add(edge);
-            }
+        } else {
+            log.info("Neo4j不可用，直接使用MySQL关系表构建图谱：personId={}", personId);
+            buildMysqlRelationGraph(personId, limit, nodes, edges);
         }
 
         result.put("nodes", nodes);
@@ -390,11 +456,89 @@ public class TargetPersonProfileService {
         return stats;
     }
 
-    private List<TargetPerson> findMockRelated(String personId) {
+    private void buildMysqlRelationGraph(String personId, int limit,
+                                          List<Map<String, Object>> nodes,
+                                          List<Map<String, Object>> edges) {
+        List<PersonRelation> relations = personRelationMapper.selectByPersonId(personId);
+        Set<String> addedNodeIds = new HashSet<>();
+        addedNodeIds.add(personId);
+
+        for (PersonRelation rel : relations) {
+            String otherPersonId = personId.equals(rel.getPersonId1()) ? rel.getPersonId2() : rel.getPersonId1();
+            if (addedNodeIds.contains(otherPersonId)) continue;
+            if (addedNodeIds.size() > limit) break;
+
+            TargetPerson other = targetPersonMapper.selectByPersonId(otherPersonId);
+            if (other == null) continue;
+
+            Map<String, Object> node = new HashMap<>();
+            node.put("id", other.getPersonId());
+            node.put("label", other.getPersonName());
+            node.put("type", other.getPersonType());
+            node.put("level", other.getControlLevel());
+            node.put("riskScore", other.getRiskScore());
+            node.put("source", "mysql_relation");
+            nodes.add(node);
+            addedNodeIds.add(other.getPersonId());
+
+            Map<String, Object> edge = new HashMap<>();
+            edge.put("source", rel.getPersonId1());
+            edge.put("target", rel.getPersonId2());
+            edge.put("relation", rel.getRelationName());
+            edge.put("color", "同案人员".equals(rel.getRelationName()) ? "#ff4d4f" : "#faad14");
+            edge.put("strength", rel.getStrength());
+            edge.put("degraded", true);
+            edges.add(edge);
+        }
+
+        if (edges.isEmpty()) {
+            TargetPerson center = targetPersonMapper.selectByPersonId(personId);
+            if (center != null) {
+                List<TargetPerson> fallback = findFallbackRelated(center, limit);
+                for (TargetPerson r : fallback) {
+                    if (addedNodeIds.contains(r.getPersonId())) continue;
+                    Map<String, Object> node = new HashMap<>();
+                    node.put("id", r.getPersonId());
+                    node.put("label", r.getPersonName());
+                    node.put("type", r.getPersonType());
+                    node.put("level", r.getControlLevel());
+                    node.put("source", "mysql_fallback");
+                    nodes.add(node);
+                    addedNodeIds.add(r.getPersonId());
+
+                    String relation = inferRelation(center, r);
+                    Map<String, Object> edge = new HashMap<>();
+                    edge.put("source", personId);
+                    edge.put("target", r.getPersonId());
+                    edge.put("relation", relation);
+                    edge.put("color", "同案人员".equals(relation) ? "#ff4d4f" : "#faad14");
+                    edge.put("degraded", true);
+                    edge.put("inferred", true);
+                    edges.add(edge);
+                }
+            }
+        }
+    }
+
+    private List<TargetPerson> findFallbackRelated(TargetPerson person, int limit) {
         LambdaQueryWrapper<TargetPerson> wrapper = new LambdaQueryWrapper<>();
-        wrapper.ne(TargetPerson::getPersonId, personId)
-                .last("LIMIT 8");
+        wrapper.ne(TargetPerson::getPersonId, person.getPersonId())
+                .eq(TargetPerson::getStatus, 1);
+        if (person.getPoliceStationCode() != null) {
+            wrapper.eq(TargetPerson::getPoliceStationCode, person.getPoliceStationCode());
+        }
+        wrapper.last("LIMIT " + limit);
         return targetPersonMapper.selectList(wrapper);
+    }
+
+    private String inferRelation(TargetPerson center, TargetPerson related) {
+        if (center.getPoliceStationCode() != null
+                && center.getPoliceStationCode().equals(related.getPoliceStationCode())
+                && "CRIMINAL".equals(center.getPersonType())
+                && "CRIMINAL".equals(related.getPersonType())) {
+            return "同案人员";
+        }
+        return "频繁联系";
     }
 
     public boolean canSendFaceAlert(String personId) {

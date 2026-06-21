@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "警员管理", description = "警员增删改查、状态管理")
 @RestController
@@ -92,5 +93,12 @@ public class PoliceUserController {
     @GetMapping("/available")
     public Result<List<PoliceUser>> getAvailablePolice() {
         return Result.success(policeUserService.getAvailablePolice());
+    }
+
+    @Operation(summary = "按派出所编码查询辖区警员")
+    @GetMapping("/station")
+    public Result<List<Map<String, Object>>> getPoliceByStation(
+            @Parameter(description = "派出所编码") @RequestParam String stationCode) {
+        return Result.success(policeUserService.getPoliceByStationCode(stationCode));
     }
 }

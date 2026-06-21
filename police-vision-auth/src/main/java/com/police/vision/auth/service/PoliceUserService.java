@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -122,5 +123,9 @@ public class PoliceUserService {
 
     public List<String> getPermissionsByUserId(Long userId) {
         return policeUserMapper.selectPermissionCodesByUserId(userId);
+    }
+
+    public List<Map<String, Object>> getPoliceByStationCode(String stationCode) {
+        return policeUserMapper.selectByStationCode(stationCode);
     }
 }

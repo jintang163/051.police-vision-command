@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.control.mapper.GeoFenceMapper">
+
+    <select id="selectByFenceId" resultType="com.police.vision.control.entity.GeoFence">
+        SELECT * FROM geo_fence WHERE fence_id = #{fenceId} AND deleted = 0 LIMIT 1
+    </select>
+
+    <select id="selectByEnabled" resultType="com.police.vision.control.entity.GeoFence">
+        SELECT * FROM geo_fence WHERE enabled = #{enabled} AND deleted = 0 ORDER BY fence_level DESC
+    </select>
+
+    <select id="selectByStationCode" resultType="com.police.vision.control.entity.GeoFence">
+        SELECT * FROM geo_fence WHERE police_station_code = #{stationCode} AND deleted = 0 ORDER BY fence_level DESC
+    </select>
+
+    <select id="selectByLocationAndRadius" resultType="com.police.vision.control.entity.GeoFence">
+        SELECT * FROM geo_fence
+        WHERE enabled = 1 AND deleted = 0
+          AND center_longitude IS NOT NULL AND center_latitude IS NOT NULL AND radius IS NOT NULL
+          AND ST_Distance_Sphere(
+              POINT(center_longitude, center_latitude),
+              POINT(#{longitude}, #{latitude})
+          ) &lt;= #{radius}
+        ORDER BY fence_level DESC
+    </select>
+
+</mapper>

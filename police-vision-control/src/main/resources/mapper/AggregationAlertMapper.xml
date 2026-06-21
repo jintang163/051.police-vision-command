@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.control.mapper.AggregationAlertMapper">
+
+    <select id="selectByAlertId" resultType="com.police.vision.control.entity.AggregationAlert">
+        SELECT * FROM aggregation_alert WHERE alert_id = #{alertId} AND deleted = 0 LIMIT 1
+    </select>
+
+    <select id="selectByStatus" resultType="com.police.vision.control.entity.AggregationAlert">
+        SELECT * FROM aggregation_alert WHERE status = #{status} AND deleted = 0 ORDER BY alert_time DESC
+    </select>
+
+    <select id="selectByAreaCode" resultType="com.police.vision.control.entity.AggregationAlert">
+        SELECT * FROM aggregation_alert WHERE area_code = #{areaCode} AND deleted = 0 ORDER BY alert_time DESC
+    </select>
+
+    <select id="selectByTimeRange" resultType="com.police.vision.control.entity.AggregationAlert">
+        SELECT * FROM aggregation_alert
+        WHERE alert_time BETWEEN #{start} AND #{end} AND deleted = 0
+        ORDER BY alert_time DESC
+    </select>
+
+</mapper>

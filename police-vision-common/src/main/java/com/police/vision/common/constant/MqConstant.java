@@ -20,6 +20,8 @@ public class MqConstant {
     public static final String WEBSOCKET_PUSH_TOPIC = "police-websocket-push-topic";
     public static final String WEBSOCKET_PUSH_GROUP = "police-websocket-push-group";
 
+    public static final String VIDEO_ALERT_TOPIC = "police-video-alert-topic";
+
     public static final String GIS_LOCATION_TOPIC = "police-gis-location-topic";
     public static final String GIS_LOCATION_GROUP = "police-gis-location-group";
 

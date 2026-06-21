@@ -4,17 +4,21 @@ import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.police.vision.common.constant.MqConstant;
 import com.police.vision.common.dto.AlertMessageDTO;
-import com.police.vision.common.entity.GpsLocation;
 import com.police.vision.common.enums.AlertTypeEnum;
 import com.police.vision.common.util.MqUtil;
 import com.police.vision.common.util.SnowflakeIdUtil;
 import com.police.vision.control.entity.*;
 import com.police.vision.control.mapper.*;
-import com.police.vision.mobile.service.DispatchMobileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cloud.client.ServiceInstance;
+import org.springframework.cloud.client.discovery.DiscoveryClient;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -30,7 +34,9 @@ public class GeoFenceService {
     private final FenceAlertMapper fenceAlertMapper;
     private final TargetPersonMapper targetPersonMapper;
     private final MqUtil mqUtil;
-    private final DispatchMobileService dispatchMobileService;
+    private final DiscoveryClient discoveryClient;
+
+    private final RestTemplate restTemplate = new RestTemplate();
 
     private static final Map<String, Set<String>> PERSON_FENCE_CACHE = new ConcurrentHashMap<>();
 
@@ -112,9 +118,7 @@ public class GeoFenceService {
 
             sendFenceAlertMq(alert, person);
 
-            if (dispatchMobileService != null) {
-                pushVisitorToPolice(person, fence, alert);
-            }
+            pushVisitorToPolice(person, fence, alert);
 
             log.warn("电子围栏告警：person={}[{}] 进入围栏={}[{}]，级别={}",
                     personName, personId, fence.getFenceName(), fence.getFenceId(), alertLevel);
@@ -257,46 +261,93 @@ public class GeoFenceService {
         if (stationCode == null || stationCode.isEmpty()) return;
 
         try {
-            List<TargetPerson> officers = targetPersonMapper.selectByStationCode(stationCode);
-            List<Long> officerIds = new ArrayList<>();
-            for (TargetPerson officer : officers) {
-                Long id = Long.parseLong(officer.getPersonId().replace("P", ""));
-                officerIds.add(id);
+            List<Map<String, Object>> officers = queryPoliceOfficersByStation(stationCode);
+            if (officers == null || officers.isEmpty()) {
+                log.info("辖区无在线警员，跳过访客推送：station={}", stationCode);
+                return;
             }
 
-            if (!officerIds.isEmpty()) {
-                Map<String, Object> visitorInfo = new HashMap<>();
-                visitorInfo.put("type", "visitor_push");
-                visitorInfo.put("visitorId", person.getPersonId());
-                visitorInfo.put("visitorName", person.getPersonName());
-                visitorInfo.put("personType", person.getPersonTypeName());
-                visitorInfo.put("controlLevel", person.getControlLevel());
-                visitorInfo.put("avatarUrl", person.getAvatarUrl());
-                visitorInfo.put("fenceName", fence.getFenceName());
-                visitorInfo.put("fenceTypeName", fence.getFenceTypeName());
-                visitorInfo.put("address", person.getResidentAddress());
-                visitorInfo.put("phone", person.getPhone());
-                visitorInfo.put("alertTime", alert.getAlertTime());
-                visitorInfo.put("alertLevel", alert.getAlertLevel());
-                visitorInfo.put("snapshotUrl", alert.getSnapshotUrl());
-                visitorInfo.put("longitude", alert.getAlertLongitude());
-                visitorInfo.put("latitude", alert.getAlertLatitude());
-                visitorInfo.put("description", alert.getDescription());
+            Map<String, Object> visitorInfo = new HashMap<>();
+            visitorInfo.put("type", "visitor_push");
+            visitorInfo.put("visitorId", person.getPersonId());
+            visitorInfo.put("visitorName", person.getPersonName());
+            visitorInfo.put("personType", person.getPersonTypeName());
+            visitorInfo.put("controlLevel", person.getControlLevel());
+            visitorInfo.put("avatarUrl", person.getAvatarUrl());
+            visitorInfo.put("fenceName", fence.getFenceName());
+            visitorInfo.put("fenceTypeName", fence.getFenceTypeName());
+            visitorInfo.put("address", person.getResidentAddress());
+            visitorInfo.put("phone", person.getPhone());
+            visitorInfo.put("alertTime", alert.getAlertTime());
+            visitorInfo.put("alertLevel", alert.getAlertLevel());
+            visitorInfo.put("snapshotUrl", alert.getSnapshotUrl());
+            visitorInfo.put("longitude", alert.getAlertLongitude());
+            visitorInfo.put("latitude", alert.getAlertLatitude());
+            visitorInfo.put("description", alert.getDescription());
+            visitorInfo.put("fenceId", fence.getFenceId());
+            visitorInfo.put("alertId", alert.getAlertId());
 
-                for (Long officerId : officerIds) {
-                    Map<String, Object> wsMsg = mqUtil.buildWebSocketMessage("visitor_push", visitorInfo);
-                    wsMsg.put("policeId", officerId);
-                    mqUtil.sendWebsocketScreenPush(wsMsg);
+            for (Map<String, Object> officer : officers) {
+                Object userIdObj = officer.get("id");
+                if (userIdObj == null) continue;
+                Long officerId;
+                try {
+                    officerId = Long.parseLong(userIdObj.toString());
+                } catch (NumberFormatException e) {
+                    continue;
                 }
-                alert.setVisitorPushed(true);
-                alert.setVisitorPushTime(LocalDateTime.now());
-                fenceAlertMapper.updateById(alert);
-                log.info("访客推送完成：visitor={}, station={}, officers={}",
-                        person.getPersonId(), stationCode, officerIds.size());
+
+                Map<String, Object> wsMsg = mqUtil.buildWebSocketMessage("visitor_push", visitorInfo);
+                wsMsg.put("policeId", officerId);
+                mqUtil.sendWebsocketScreenPush(wsMsg);
+
+                Map<String, Object> mobileMsg = new HashMap<>(visitorInfo);
+                mobileMsg.put("dispatchId", alert.getAlertId());
+                mobileMsg.put("alarmId", alert.getId());
+                mobileMsg.put("policeId", officerId);
+                Map<String, Object> mobileWsMsg = mqUtil.buildWebSocketMessage("new_dispatch", mobileMsg);
+                mobileWsMsg.put("policeId", officerId);
+                mqUtil.send(MqConstant.WEBSOCKET_PUSH_TOPIC + ":visitor_push", mobileWsMsg);
             }
+
+            alert.setVisitorPushed(true);
+            alert.setVisitorPushTime(LocalDateTime.now());
+            fenceAlertMapper.updateById(alert);
+            log.info("访客推送完成：visitor={}, station={}, officers={}",
+                    person.getPersonId(), stationCode, officers.size());
         } catch (Exception e) {
             log.error("访客推送失败：visitorId={}", person.getPersonId(), e);
         }
+    }
+
+    private List<Map<String, Object>> queryPoliceOfficersByStation(String stationCode) {
+        try {
+            List<ServiceInstance> instances = discoveryClient.getInstances("police-vision-auth");
+            if (instances == null || instances.isEmpty()) {
+                log.warn("auth服务不可用，无法查询辖区警员：station={}", stationCode);
+                return Collections.emptyList();
+            }
+
+            ServiceInstance instance = instances.get(0);
+            String url = String.format("http://%s:%d/auth/police/station?stationCode=%s",
+                    instance.getHost(), instance.getPort(), stationCode);
+
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    url, HttpMethod.GET, null,
+                    new ParameterizedTypeReference<Map<String, Object>>() {});
+
+            if (response.getBody() != null && response.getBody().get("data") != null) {
+                Object data = response.getBody().get("data");
+                if (data instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> list = (List<Map<String, Object>>) data;
+                    return list;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("查询辖区警员失败（auth服务不可用）：station={}, error={}", stationCode, e.getMessage());
+        }
+        return Collections.emptyList();
     }
 
     public double calculateDistance(double lat1, double lng1, double lat2, double lng2) {

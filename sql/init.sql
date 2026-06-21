@@ -1044,6 +1044,43 @@ UPDATE `target_person` SET
 WHERE `person_type` IS NULL;
 
 -- =============================================
+-- 7.7 人员关系降级表（Neo4j不可用时MySQL补偿）
+-- =============================================
+DROP TABLE IF EXISTS `person_relation`;
+CREATE TABLE `person_relation` (
+    `id` BIGINT NOT NULL COMMENT '主键ID',
+    `relation_id` VARCHAR(64) NOT NULL COMMENT '关系ID',
+    `person_id1` VARCHAR(64) NOT NULL COMMENT '人员1ID',
+    `person_id2` VARCHAR(64) NOT NULL COMMENT '人员2ID',
+    `relation_type` VARCHAR(32) NOT NULL COMMENT '关系类型: CO_CASE/FREQUENT_CONTACT/FAMILY',
+    `relation_name` VARCHAR(64) NOT NULL COMMENT '关系名称',
+    `case_id` VARCHAR(64) COMMENT '案件ID(同案关系)',
+    `case_name` VARCHAR(128) COMMENT '案件名称',
+    `description` VARCHAR(512) COMMENT '关系描述',
+    `contact_count` INT DEFAULT 0 COMMENT '联系次数',
+    `strength` INT DEFAULT 50 COMMENT '关系强度0-100',
+    `first_contact_date` DATE COMMENT '首次接触日期',
+    `last_contact_date` DATE COMMENT '最后接触日期',
+    `synced_to_neo4j` TINYINT DEFAULT 0 COMMENT '是否已同步到Neo4j: 0-未同步 1-已同步',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `create_by` BIGINT COMMENT '创建人',
+    `update_by` BIGINT COMMENT '更新人',
+    `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除 1-已删除',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_relation_id` (`relation_id`),
+    KEY `idx_person_id1` (`person_id1`),
+    KEY `idx_person_id2` (`person_id2`),
+    KEY `idx_relation_type` (`relation_type`),
+    KEY `idx_synced` (`synced_to_neo4j`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='人员关系表(Neo4j降级补偿)';
+
+-- sys_user表补充经纬度和部门字段（访客推送需要按派出所查警员）
+ALTER TABLE `sys_user` ADD COLUMN IF NOT EXISTS `longitude` DECIMAL(12,8) COMMENT '经度';
+ALTER TABLE `sys_user` ADD COLUMN IF NOT EXISTS `latitude` DECIMAL(12,8) COMMENT '纬度';
+ALTER TABLE `sys_user` ADD COLUMN IF NOT EXISTS `department_id` BIGINT COMMENT '所属部门ID';
+
+-- =============================================
 -- 8. 索引优化说明
 -- =============================================
 -- 1. 所有表都有主键索引
