@@ -18,4 +18,8 @@ public class AlarmDispatchDTO implements Serializable {
     private Long commanderId;
     private String dispatchRemark;
     private Integer priority;
+
+    private Boolean useSmartEta;
+
+    private String recalcReason;
 }

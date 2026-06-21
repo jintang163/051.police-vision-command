@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.alarm.mapper.DispatchTrafficSnapshotMapper">
+
+    <resultMap id="dispatchTrafficSnapshotMap" type="com.police.vision.common.entity.DispatchTrafficSnapshot">
+        <id column="id" property="id"/>
+        <result column="snapshot_id" property="snapshotId"/>
+        <result column="dispatch_id" property="dispatchId"/>
+        <result column="dispatch_no" property="dispatchNo"/>
+        <result column="alarm_id" property="alarmId"/>
+        <result column="snapshot_type" property="snapshotType"/>
+        <result column="snapshot_time" property="snapshotTime"/>
+        <result column="alarm_longitude" property="alarmLongitude"/>
+        <result column="alarm_latitude" property="alarmLatitude"/>
+        <result column="police_count" property="policeCount"/>
+        <result column="police_ids_str" property="policeIdsStr"/>
+        <result column="officer_eta_data" property="officerEtaData"/>
+        <result column="route_polyline_data" property="routePolylineData"/>
+        <result column="traffic_data" property="trafficData"/>
+        <result column="weather_data" property="weatherData"/>
+        <result column="avg_traffic_level" property="avgTrafficLevel"/>
+        <result column="avg_eta_seconds" property="avgEtaSeconds"/>
+        <result column="fastest_eta_seconds" property="fastestEtaSeconds"/>
+        <result column="fastest_police_id" property="fastestPoliceId"/>
+        <result column="total_road_distance" property="totalRoadDistance"/>
+        <result column="rendezvous_longitude" property="rendezvousLongitude"/>
+        <result column="rendezvous_latitude" property="rendezvousLatitude"/>
+        <result column="rendezvous_name" property="rendezvousName"/>
+        <result column="rendezvous_eta_seconds" property="rendezvousEtaSeconds"/>
+        <result column="multi_dispatch_plan_data" property="multiDispatchPlanData"/>
+        <result column="source" property="source"/>
+        <result column="create_time" property="createTime"/>
+        <result column="remark" property="remark"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="selectByAlarmId" resultMap="dispatchTrafficSnapshotMap">
+        SELECT * FROM dispatch_traffic_snapshot
+        WHERE alarm_id = #{alarmId}
+        ORDER BY snapshot_time DESC
+    </select>
+
+    <select id="selectByDispatchId" resultMap="dispatchTrafficSnapshotMap">
+        SELECT * FROM dispatch_traffic_snapshot
+        WHERE dispatch_id = #{dispatchId}
+        ORDER BY snapshot_time DESC
+    </select>
+
+    <select id="selectByTimeRange" resultMap="dispatchTrafficSnapshotMap">
+        SELECT * FROM dispatch_traffic_snapshot
+        WHERE snapshot_time BETWEEN #{startTime} AND #{endTime}
+        ORDER BY snapshot_time DESC
+    </select>
+
+    <select id="selectBySnapshotId" resultMap="dispatchTrafficSnapshotMap">
+        SELECT * FROM dispatch_traffic_snapshot
+        WHERE snapshot_id = #{snapshotId}
+        LIMIT 1
+    </select>
+
+</mapper>

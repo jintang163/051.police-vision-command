@@ -29,4 +29,21 @@ public class RedisConstant {
     public static final Long LOCATION_EXPIRE = 300L;
 
     public static final String RATE_LIMIT_PREFIX = "rate:limit:";
+
+    public static final String ROAD_TRAFFIC_PREFIX = "amap:traffic:road:";
+    public static final Long ROAD_TRAFFIC_EXPIRE = 300L;
+
+    public static final String ROUTE_ETA_CACHE_PREFIX = "amap:route:eta:";
+    public static final Long ROUTE_ETA_EXPIRE = 60L;
+
+    public static final String DISPATCH_TRACK_PREFIX = "dispatch:track:";
+    public static final Long DISPATCH_TRACK_EXPIRE = 3600L;
+
+    public static final String DISPATCH_YAW_CHECK_PREFIX = "dispatch:yaw:check:";
+    public static final Long DISPATCH_YAW_EXPIRE = 1800L;
+
+    public static final String DISPATCH_RECALC_LOCK_PREFIX = "dispatch:recalc:lock:";
+
+    public static final String AMAP_DISTRICT_CACHE_PREFIX = "amap:district:";
+    public static final Long AMAP_DISTRICT_EXPIRE = 86400L;
 }

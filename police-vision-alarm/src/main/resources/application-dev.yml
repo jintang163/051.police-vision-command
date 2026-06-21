@@ -81,3 +81,14 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+
+amap:
+  api-key: "your-amap-web-api-key-here"
+  secret-key: "your-amap-secret-key-here"
+  route-url: "https://restapi.amap.com/v3/direction/driving"
+  traffic-url: "https://restapi.amap.com/v3/traffic/status/circle"
+  connect-timeout: 5000
+  read-timeout: 8000
+  traffic-refresh-minutes: 5
+  route-eta-cache-seconds: 60
+  use-mock: true

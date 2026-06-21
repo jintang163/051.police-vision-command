@@ -181,4 +181,63 @@ public class RedisUtil {
             throw new BusinessException(ResultCode.REDIS_ERROR);
         }
     }
+
+    public void setMap(String key, Map<String, Object> map) {
+        try {
+            if (map != null && !map.isEmpty()) {
+                Map<String, String> stringMap = new HashMap<>();
+                for (Map.Entry<String, Object> entry : map.entrySet()) {
+                    Object val = entry.getValue();
+                    stringMap.put(entry.getKey(), val == null ? null : (val instanceof String ? (String) val : JSON.toJSONString(val)));
+                }
+                stringRedisTemplate.opsForHash().putAll(key, stringMap);
+            }
+        } catch (Exception e) {
+            throw new BusinessException(ResultCode.REDIS_ERROR);
+        }
+    }
+
+    public void setMap(String key, Map<String, Object> map, long timeout, TimeUnit unit) {
+        setMap(key, map);
+        expire(key, timeout, unit);
+    }
+
+    public Map<String, Object> getMap(String key) {
+        try {
+            Map<Object, Object> entries = stringRedisTemplate.opsForHash().entries(key);
+            Map<String, Object> result = new HashMap<>();
+            if (entries != null) {
+                for (Map.Entry<Object, Object> entry : entries.entrySet()) {
+                    result.put(entry.getKey() == null ? null : entry.getKey().toString(), entry.getValue());
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            throw new BusinessException(ResultCode.REDIS_ERROR);
+        }
+    }
+
+    public void leftPush(String key, String value) {
+        try {
+            stringRedisTemplate.opsForList().leftPush(key, value);
+        } catch (Exception e) {
+            throw new BusinessException(ResultCode.REDIS_ERROR);
+        }
+    }
+
+    public List<String> rangeList(String key, long start, long end) {
+        try {
+            return stringRedisTemplate.opsForList().range(key, start, end);
+        } catch (Exception e) {
+            throw new BusinessException(ResultCode.REDIS_ERROR);
+        }
+    }
+
+    public Long listSize(String key) {
+        try {
+            return stringRedisTemplate.opsForList().size(key);
+        } catch (Exception e) {
+            throw new BusinessException(ResultCode.REDIS_ERROR);
+        }
+    }
 }

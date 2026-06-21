@@ -117,4 +117,19 @@ public class MqUtil {
         message.put("timestamp", System.currentTimeMillis());
         return message;
     }
+
+    public void sendDispatchNotifyPolice(Long policeId, Object message) {
+        try {
+            Map<String, Object> notifyMsg = new HashMap<>();
+            notifyMsg.put("policeId", policeId);
+            notifyMsg.put("payload", message);
+            notifyMsg.put("timestamp", System.currentTimeMillis());
+            sendOneway(RocketMQConfig.buildDestination(MqConstant.DISPATCH_NOTIFY_TOPIC,
+                    MqConstant.TAG_DISPATCH_POLICE_PREFIX + policeId), notifyMsg);
+            sendOneway(RocketMQConfig.buildDestination(MqConstant.DISPATCH_NOTIFY_TOPIC,
+                    "broadcast"), notifyMsg);
+        } catch (Exception e) {
+            log.error("发送警员派单通知失败：policeId={}", policeId, e);
+        }
+    }
 }

@@ -6,6 +6,7 @@ import com.police.vision.common.entity.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -34,4 +35,44 @@ public class DispatchRecord extends BaseEntity {
     private String dispatchRemark;
 
     private Integer priority;
+
+    private String dispatchAlgorithm;
+
+    private String dispatchMode;
+
+    private String trafficSnapshotId;
+
+    private Integer fastestEtaSeconds;
+
+    private Long fastestPoliceId;
+
+    private String fastestPoliceName;
+
+    private BigDecimal avgTrafficLevel;
+
+    private BigDecimal totalRoadDistance;
+
+    private String officerEtaSnapshot;
+
+    private String routePolylineSnapshot;
+
+    private BigDecimal rendezvousLongitude;
+
+    private BigDecimal rendezvousLatitude;
+
+    private String rendezvousName;
+
+    private Integer rendezvousEtaSeconds;
+
+    private String multiDispatchPlanData;
+
+    private Integer yawRecalcCount;
+
+    private String lastRecalcReason;
+
+    private LocalDateTime lastRecalcTime;
+
+    private String dispatchVersion;
+
+    private BigDecimal savedEtaPercent;
 }
