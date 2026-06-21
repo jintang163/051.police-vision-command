@@ -144,21 +144,42 @@ public class ScreenWebSocketHandler implements WebSocketHandler {
 
     public void pushPoliceLocation(Object data) {
         broadcast(mqUtil.buildWebSocketMessage("police_location", data));
+        broadcast(mqUtil.buildWebSocketMessage("police", data));
     }
 
     public void pushNewAlarm(Object data) {
         broadcast(mqUtil.buildWebSocketMessage("new_alarm", data));
+        broadcast(mqUtil.buildWebSocketMessage("alarm", data));
     }
 
     public void pushAlarmStatusUpdate(Object data) {
         broadcast(mqUtil.buildWebSocketMessage("alarm_status_update", data));
+        broadcast(mqUtil.buildWebSocketMessage("alarm", data));
     }
 
     public void pushVideoAlert(Object data) {
         broadcast(mqUtil.buildWebSocketMessage("video_alert", data));
+        broadcast(mqUtil.buildWebSocketMessage("alert", data));
     }
 
     public void pushRealTimeStats(Object data) {
         broadcast(mqUtil.buildWebSocketMessage("real_time_stats", data));
+        broadcast(mqUtil.buildWebSocketMessage("stats", data));
+    }
+
+    public void pushDispatchOrder(Object data) {
+        broadcast(mqUtil.buildWebSocketMessage("dispatch_order", data));
+    }
+
+    public void pushDispatchStatus(Object data) {
+        broadcast(mqUtil.buildWebSocketMessage("dispatch_status", data));
+    }
+
+    public void pushToPolice(Long policeId, Object data) {
+        sendToUser(policeId, data);
+    }
+
+    public void pushDispatchToPolice(Long policeId, Object data) {
+        sendToUser(policeId, mqUtil.buildWebSocketMessage("new_dispatch", data));
     }
 }

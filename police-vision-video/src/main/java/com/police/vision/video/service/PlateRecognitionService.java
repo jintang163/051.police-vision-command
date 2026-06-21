@@ -6,9 +6,11 @@ import com.police.vision.common.enums.AlertTypeEnum;
 import com.police.vision.common.util.MqUtil;
 import com.police.vision.common.util.RedisUtil;
 import com.police.vision.common.util.SnowflakeIdUtil;
+import com.police.vision.video.client.Yolov8Client;
 import com.police.vision.video.entity.CameraDevice;
 import com.police.vision.video.entity.PlateRecord;
 import com.police.vision.video.entity.TargetVehicle;
+import com.police.vision.video.entity.VideoStorage;
 import com.police.vision.video.mapper.CameraDeviceMapper;
 import com.police.vision.video.mapper.PlateRecordMapper;
 import com.police.vision.video.mapper.TargetVehicleMapper;
@@ -22,8 +24,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -35,22 +35,15 @@ public class PlateRecognitionService {
     private final CameraDeviceMapper cameraDeviceMapper;
     private final RedisUtil redisUtil;
     private final MqUtil mqUtil;
-
-    private static final Pattern PLATE_PATTERN = Pattern.compile(
-            "^[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼使领]" +
-                    "[A-Z][A-HJ-NP-Z0-9]{4,5}[A-HJ-NP-Z0-9挂学警港澳]$");
+    private final Yolov8Client yolov8Client;
+    private final VideoClipService videoClipService;
 
     public Map<String, Object> recognizePlate(byte[] image) {
         try {
-            log.info("车牌识别，图片大小：{} bytes", image.length);
-            Map<String, Object> result = new HashMap<>();
-            String plateNo = generateRandomPlate();
-            result.put("plateNo", plateNo);
-            result.put("vehicleColor", getRandomColor());
-            result.put("vehicleType", getRandomVehicleType());
-            result.put("confidence", 0.85 + Math.random() * 0.15);
-            result.put("valid", PLATE_PATTERN.matcher(plateNo).matches());
-            log.info("车牌识别结果：{}", result);
+            log.info("调用YOLOv8车牌识别，图片大小：{} bytes", image.length);
+            Map<String, Object> result = yolov8Client.detectPlate(image);
+            log.info("车牌识别结果：plateNo={}, confidence={}",
+                    result.get("plateNo"), result.get("confidence"));
             return result;
         } catch (Exception e) {
             log.error("车牌识别失败：", e);
@@ -58,31 +51,31 @@ public class PlateRecognitionService {
         }
     }
 
-    private String generateRandomPlate() {
-        String[] provinces = {"京", "津", "沪", "渝", "冀", "豫", "云", "辽", "黑", "湘",
-                "皖", "鲁", "新", "苏", "浙", "赣", "鄂", "桂", "甘", "晋",
-                "蒙", "陕", "吉", "闽", "贵", "粤", "青", "藏", "川", "宁", "琼"};
-        String province = provinces[(int) (Math.random() * provinces.length)];
-        String letter = String.valueOf((char) ('A' + (int) (Math.random() * 26)));
-        StringBuilder numbers = new StringBuilder();
-        for (int i = 0; i < 5; i++) {
-            if (Math.random() > 0.7) {
-                numbers.append((char) ('A' + (int) (Math.random() * 26)));
-            } else {
-                numbers.append((int) (Math.random() * 10));
+    public Map<String, Object> detectAndRecognizePlate(byte[] image) {
+        try {
+            log.info("车牌检测与识别，图片大小：{} bytes", image.length);
+            Map<String, Object> result = recognizePlate(image);
+
+            String plateNo = (String) result.get("plateNo");
+            if (plateNo != null && Boolean.TRUE.equals(result.get("valid"))) {
+                TargetVehicle target = getTargetVehicleByPlateNo(plateNo);
+                if (target != null && target.getStatus() == 1) {
+                    result.put("isTarget", true);
+                    result.put("targetInfo", target);
+                    result.put("controlLevel", target.getControlLevel());
+                } else {
+                    result.put("isTarget", false);
+                }
             }
+
+            return result;
+        } catch (Exception e) {
+            log.error("车牌检测失败：", e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("valid", false);
+            result.put("error", e.getMessage());
+            return result;
         }
-        return province + letter + numbers;
-    }
-
-    private String getRandomColor() {
-        String[] colors = {"白色", "黑色", "灰色", "银色", "红色", "蓝色", "绿色", "黄色", "棕色", "金色"};
-        return colors[(int) (Math.random() * colors.length)];
-    }
-
-    private String getRandomVehicleType() {
-        String[] types = {"轿车", "SUV", "面包车", "货车", "客车", "摩托车", "电动车"};
-        return types[(int) (Math.random() * types.length)];
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -139,6 +132,18 @@ public class PlateRecognitionService {
         TargetVehicle target = targetVehicleMapper.selectByPlateNo(record.getPlateNo());
         if (target != null && target.getStatus() == 1) {
             CameraDevice camera = cameraDeviceMapper.selectByDeviceId(record.getCameraId());
+
+            VideoStorage videoClip = null;
+            try {
+                videoClip = videoClipService.captureAlertVideo(
+                        record.getCameraId(),
+                        record.getDetectTime()
+                );
+                log.info("车牌匹配告警视频截取完成：storageId={}", videoClip.getStorageId());
+            } catch (Exception e) {
+                log.error("截取车牌匹配告警视频失败：{}", e.getMessage());
+            }
+
             AlertMessageDTO alert = new AlertMessageDTO();
             alert.setAlertId("A" + SnowflakeIdUtil.nextId());
             alert.setAlertType(AlertTypeEnum.PLATE_MATCH.getCode());
@@ -153,13 +158,23 @@ public class PlateRecognitionService {
             alert.setSnapshotUrl(record.getSnapshotUrl());
             alert.setAlertTime(record.getDetectTime());
             alert.setTargetPlateNo(record.getPlateNo());
+            if (videoClip != null) {
+                try {
+                    alert.setVideoClipUrl(videoClipService.getVideoUrl(videoClip.getFilePath()));
+                } catch (Exception e) {
+                    log.warn("获取告警视频URL失败：{}", e.getMessage());
+                }
+            }
             Map<String, Object> extra = new HashMap<>();
             extra.put("vehicleType", record.getVehicleType());
             extra.put("vehicleColor", record.getVehicleColor());
             extra.put("vehicleId", target.getVehicleId());
+            extra.put("videoStorageId", videoClip != null ? videoClip.getStorageId() : null);
             alert.setExtraData(extra);
             mqUtil.sendVideoAlert(alert);
-            log.info("车牌匹配告警已发送：plateNo={}, vehicleId={}", record.getPlateNo(), target.getVehicleId());
+            log.info("车牌匹配告警已发送：plateNo={}, vehicleId={}, videoStorageId={}",
+                    record.getPlateNo(), target.getVehicleId(),
+                    videoClip != null ? videoClip.getStorageId() : null);
         }
     }
 
@@ -174,10 +189,6 @@ public class PlateRecognitionService {
     }
 
     public boolean validatePlate(String plateNo) {
-        if (plateNo == null || plateNo.isEmpty()) {
-            return false;
-        }
-        Matcher matcher = PLATE_PATTERN.matcher(plateNo.toUpperCase());
-        return matcher.matches();
+        return yolov8Client.validatePlate(plateNo);
     }
 }

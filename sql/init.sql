@@ -787,6 +787,66 @@ INSERT INTO `emergency_plan` (`id`, `plan_no`, `plan_name`, `plan_type`, `plan_l
 (4, 'EP004', '重大交通事故处置预案', '交通事故', 2, '发生3人以上死亡或10人以上受伤的交通事故', 1, 5);
 
 -- =============================================
+-- 7.5 移动警务端模块
+-- =============================================
+
+DROP TABLE IF EXISTS `mobile_dispatch_record`;
+CREATE TABLE `mobile_dispatch_record` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `dispatch_id` BIGINT NOT NULL COMMENT '派单ID',
+    `alarm_id` BIGINT NOT NULL COMMENT '警情ID',
+    `police_id` BIGINT NOT NULL COMMENT '警员ID',
+    `dispatch_no` VARCHAR(32) COMMENT '派单编号',
+    `alarm_no` VARCHAR(32) COMMENT '警情编号',
+    `priority` TINYINT COMMENT '优先级: 1-紧急 2-高 3-中 4-低',
+    `alarm_content` TEXT COMMENT '警情内容',
+    `address` VARCHAR(256) COMMENT '事发地址',
+    `longitude` DECIMAL(12, 8) COMMENT '事发地经度',
+    `latitude` DECIMAL(12, 8) COMMENT '事发地纬度',
+    `dispatch_remark` VARCHAR(512) COMMENT '派单备注',
+    `dispatch_status` TINYINT DEFAULT 0 COMMENT '状态: 0-待接收 1-已出警 2-已到达 3-已完成',
+    `dispatch_time` DATETIME COMMENT '派单时间',
+    `response_time` DATETIME COMMENT '响应时间(出警时间)',
+    `arrive_time` DATETIME COMMENT '到达时间',
+    `finish_time` DATETIME COMMENT '完成时间',
+    `arrive_longitude` DECIMAL(12, 8) COMMENT '到达时经度',
+    `arrive_latitude` DECIMAL(12, 8) COMMENT '到达时纬度',
+    `handle_result` VARCHAR(1024) COMMENT '处理结果',
+    `handle_remark` VARCHAR(1024) COMMENT '处理备注',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `create_by` BIGINT COMMENT '创建人',
+    `update_by` BIGINT COMMENT '更新人',
+    `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_dispatch_police` (`dispatch_id`, `police_id`),
+    KEY `idx_police_id` (`police_id`),
+    KEY `idx_alarm_id` (`alarm_id`),
+    KEY `idx_dispatch_status` (`dispatch_status`),
+    KEY `idx_dispatch_time` (`dispatch_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='移动端派单记录表';
+
+DROP TABLE IF EXISTS `police_status_log`;
+CREATE TABLE `police_status_log` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `police_id` BIGINT NOT NULL COMMENT '警员ID',
+    `dispatch_id` BIGINT COMMENT '关联派单ID',
+    `status` TINYINT NOT NULL COMMENT '状态: 0-离线 1-在线 2-出警中 3-到达现场 4-处理完成',
+    `status_name` VARCHAR(32) COMMENT '状态名称',
+    `remark` VARCHAR(512) COMMENT '备注',
+    `operate_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '操作时间',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `create_by` BIGINT COMMENT '创建人',
+    `update_by` BIGINT COMMENT '更新人',
+    `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_police_id` (`police_id`),
+    KEY `idx_dispatch_id` (`dispatch_id`),
+    KEY `idx_operate_time` (`operate_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='警员状态日志表';
+
+-- =============================================
 -- 8. 索引优化说明
 -- =============================================
 -- 1. 所有表都有主键索引

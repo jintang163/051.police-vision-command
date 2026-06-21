@@ -11,6 +11,8 @@ import {
   VideoCameraOutlined,
   VideoCameraAddOutlined
 } from '@ant-design/icons';
+import FlvPlayer from '@/components/FlvPlayer';
+import { getVideoFlvUrl } from '@/services/api';
 
 const { Option } = Select;
 
@@ -20,7 +22,7 @@ interface VideoPanelProps {
 
 const VideoPanel: React.FC<VideoPanelProps> = ({ cameras }) => {
   const [channels, setChannels] = useState<VideoChannel[]>([
-    { id: '1', name: '通道1', url: '', status: 'loading' },
+    { id: '1', name: '通道1', url: '', status: 'paused' },
     { id: '2', name: '通道2', url: '', status: 'paused' },
     { id: '3', name: '通道3', url: '', status: 'paused' },
     { id: '4', name: '通道4', url: '', status: 'paused' },
@@ -31,9 +33,11 @@ const VideoPanel: React.FC<VideoPanelProps> = ({ cameras }) => {
     const camera = cameras.find(c => c.id === cameraId);
     if (!camera) return;
 
+    const flvUrl = getVideoFlvUrl(cameraId);
+
     setChannels(prev => prev.map(ch =>
       ch.id === channelId
-        ? { ...ch, name: camera.name, url: camera.previewUrl || '', status: 'playing' }
+        ? { ...ch, name: camera.name, url: flvUrl, status: 'playing' }
         : ch
     ));
   };
@@ -95,6 +99,93 @@ const VideoPanel: React.FC<VideoPanelProps> = ({ cameras }) => {
 
   const onlineCameras = cameras.filter(c => c.status === 'online');
 
+  const renderVideoContent = (channel: VideoChannel) => {
+    if (!channel.url) {
+      return (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'column',
+          gap: 12,
+          background: 'linear-gradient(135deg, #1a1f35 0%, #141829 100%)'
+        }}>
+          <VideoCameraAddOutlined style={{ fontSize: 48, color: '#1f2940' }} />
+          <span style={{ color: '#8c9cb8', fontSize: 12 }}>选择监控摄像头</span>
+          <Select
+            size="small"
+            placeholder="选择摄像头"
+            style={{ width: '80%' }}
+            onChange={(value) => handleCameraSelect(channel.id, value)}
+            options={onlineCameras.map(c => ({ label: c.name, value: c.id }))}
+          />
+        </div>
+      );
+    }
+
+    if (channel.status === 'loading') {
+      return (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #1a1f35 0%, #141829 100%)'
+        }}>
+          <Space direction="vertical" align="center">
+            <Spin size="large" indicator={<VideoCameraOutlined spin style={{ fontSize: 32, color: '#1890ff' }} />} />
+            <span style={{ color: '#8c9cb8', fontSize: 12 }}>视频加载中...</span>
+          </Space>
+        </div>
+      );
+    }
+
+    if (channel.status === 'paused') {
+      return (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'column',
+          gap: 8,
+          background: 'linear-gradient(135deg, #1a1f35 0%, #141829 100%)'
+        }}>
+          <VideoCameraOutlined style={{ fontSize: 48, color: '#1890ff', opacity: 0.5 }} />
+          <span style={{ color: '#8c9cb8', fontSize: 12 }}>{channel.name}</span>
+          <Tag color="default">
+            {getStatusIcon(channel.status)} {getStatusText(channel.status)}
+          </Tag>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%'
+      }}>
+        <FlvPlayer url={channel.url} />
+      </div>
+    );
+  };
+
   return (
     <div className="tech-card" style={{ height: '100%', padding: 16, display: 'flex', flexDirection: 'column' }}>
       <div className="corner-decoration corner-tl" />
@@ -135,90 +226,7 @@ const VideoPanel: React.FC<VideoPanelProps> = ({ cameras }) => {
                   overflow: 'hidden'
                 }}
               >
-                {channel.url ? (
-                  channel.status !== 'error' ? (
-                    <div style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'linear-gradient(135deg, #1a1f35 0%, #141829 100%)'
-                    }}>
-                      {channel.status === 'loading' ? (
-                        <Space direction="vertical" align="center">
-                          <Spin size="large" indicator={<VideoCameraOutlined spin style={{ fontSize: 32, color: '#1890ff' }} />} />
-                          <span style={{ color: '#8c9cb8', fontSize: 12 }}>视频加载中...</span>
-                        </Space>
-                      ) : (
-                        <div style={{
-                          width: '100%',
-                          height: '100%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexDirection: 'column',
-                          gap: 8
-                        }}>
-                          <VideoCameraOutlined style={{ fontSize: 48, color: '#1890ff', opacity: 0.5 }} />
-                          <span style={{ color: '#8c9cb8', fontSize: 12 }}>{channel.name}</span>
-                          <Tag color={channel.status === 'playing' ? 'green' : 'default'}>
-                            {getStatusIcon(channel.status)} {getStatusText(channel.status)}
-                          </Tag>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column',
-                      gap: 8,
-                      background: '#1a1f35'
-                    }}>
-                      <Empty
-                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description={<span style={{ color: '#8c9cb8' }}>视频加载失败</span>}
-                      />
-                      <Button type="primary" size="small" onClick={() => reloadChannel(channel.id)}>
-                        重新加载
-                      </Button>
-                    </div>
-                  )
-                ) : (
-                  <div style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'column',
-                    gap: 12,
-                    background: 'linear-gradient(135deg, #1a1f35 0%, #141829 100%)'
-                  }}>
-                    <VideoCameraAddOutlined style={{ fontSize: 48, color: '#1f2940' }} />
-                    <span style={{ color: '#8c9cb8', fontSize: 12 }}>选择监控摄像头</span>
-                    <Select
-                      size="small"
-                      placeholder="选择摄像头"
-                      style={{ width: '80%' }}
-                      onChange={(value) => handleCameraSelect(channel.id, value)}
-                      options={onlineCameras.map(c => ({ label: c.name, value: c.id }))}
-                    />
-                  </div>
-                )}
+                {renderVideoContent(channel)}
 
                 <div style={{
                   position: 'absolute',
@@ -236,17 +244,6 @@ const VideoPanel: React.FC<VideoPanelProps> = ({ cameras }) => {
                     {getStatusIcon(channel.status)} {channel.name}
                   </Tag>
                   <div style={{ display: 'flex', gap: 4 }}>
-                    {channel.url && channel.status !== 'error' && (
-                      <Tooltip title={channel.status === 'playing' ? '暂停' : '播放'}>
-                        <Button
-                          type="text"
-                          size="small"
-                          icon={channel.status === 'playing' ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
-                          style={{ color: '#e6f1ff', padding: '0 4px' }}
-                          onClick={(e) => { e.stopPropagation(); togglePlay(channel.id); }}
-                        />
-                      </Tooltip>
-                    )}
                     {channel.url && (
                       <>
                         <Tooltip title="重新加载">

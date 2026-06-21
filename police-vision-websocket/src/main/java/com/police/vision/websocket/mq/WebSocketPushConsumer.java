@@ -42,6 +42,15 @@ public class WebSocketPushConsumer implements RocketMQListener<String> {
                 case "alarm_status_update" -> screenWebSocketHandler.pushAlarmStatusUpdate(data);
                 case "video_alert" -> screenWebSocketHandler.pushVideoAlert(data);
                 case "real_time_stats" -> screenWebSocketHandler.pushRealTimeStats(data);
+                case "dispatch_order" -> screenWebSocketHandler.pushDispatchOrder(data);
+                case "dispatch_status" -> screenWebSocketHandler.pushDispatchStatus(data);
+                case "new_dispatch" -> {
+                    Object policeIdObj = msgMap.get("policeId");
+                    if (policeIdObj != null) {
+                        Long policeId = Long.valueOf(policeIdObj.toString());
+                        screenWebSocketHandler.pushDispatchToPolice(policeId, data);
+                    }
+                }
                 default -> log.debug("未知的WebSocket消息类型：{}", type);
             }
             log.debug("WebSocket消息推送完成：type={}", type);

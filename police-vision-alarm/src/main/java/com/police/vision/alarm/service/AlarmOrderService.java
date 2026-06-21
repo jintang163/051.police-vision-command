@@ -15,6 +15,7 @@ import com.police.vision.common.enums.AlarmStatusEnum;
 import com.police.vision.common.enums.AlarmTypeEnum;
 import com.police.vision.common.exception.BusinessException;
 import com.police.vision.common.result.ResultCode;
+import com.police.vision.common.util.MqUtil;
 import com.police.vision.common.util.SnowflakeIdUtil;
 import com.police.vision.common.util.UserContext;
 import io.seata.spring.annotation.GlobalTransactional;
@@ -34,6 +35,7 @@ public class AlarmOrderService {
 
     private final AlarmOrderMapper alarmOrderMapper;
     private final AlarmHandleLogMapper alarmHandleLogMapper;
+    private final MqUtil mqUtil;
 
     @GlobalTransactional(name = "create-alarm", rollbackFor = Exception.class)
     @Transactional(rollbackFor = Exception.class)
@@ -49,6 +51,8 @@ public class AlarmOrderService {
 
         saveHandleLog(alarmOrder.getId(), 0, UserContext.getUserId(), UserContext.getUsername(),
                 "创建警情工单，警情编号：" + alarmOrder.getAlarmNo());
+
+        mqUtil.sendWebsocketScreenPush(mqUtil.buildWebSocketMessage("new_alarm", alarmOrder));
 
         log.info("创建警情工单成功，ID：{}，警情编号：{}", alarmOrder.getId(), alarmOrder.getAlarmNo());
         return alarmOrder;
@@ -115,6 +119,8 @@ public class AlarmOrderService {
         saveHandleLog(dto.getAlarmId(), 1, UserContext.getUserId(), UserContext.getUsername(),
                 String.format("更新警情状态：%s -> %s，备注：%s",
                         currentStatus.getName(), nextStatus.getName(), dto.getRemark()));
+
+        mqUtil.sendWebsocketScreenPush(mqUtil.buildWebSocketMessage("alarm_status_update", alarmOrder));
 
         log.info("更新警情状态成功，警情ID：{}，状态：{} -> {}", dto.getAlarmId(), currentStatus.getName(), nextStatus.getName());
     }

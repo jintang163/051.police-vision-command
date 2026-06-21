@@ -100,3 +100,46 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+
+ai:
+  arcface:
+    enabled: true
+    base-url: http://127.0.0.1:8000
+    api-key: arcface-api-key-2024
+    extract-endpoint: /api/v1/face/extract
+    compare-endpoint: /api/v1/face/compare
+    search-endpoint: /api/v1/face/search
+    timeout: 10000
+  yolov8:
+    enabled: true
+    base-url: http://127.0.0.1:8001
+    api-key: yolov8-api-key-2024
+    plate-endpoint: /api/v1/plate/detect
+    behavior-endpoint: /api/v1/behavior/analyze
+    detect-endpoint: /api/v1/object/detect
+    timeout: 15000
+  behavior:
+    enabled: true
+    base-url: http://127.0.0.1:8002
+    api-key: behavior-api-key-2024
+    analyze-endpoint: /api/v1/behavior/analyze
+    timeout: 30000
+
+video:
+  ffmpeg:
+    path: ffmpeg
+    default-duration: 20
+    clip-before-seconds: 10
+    clip-after-seconds: 10
+  rtsp:
+    transport: tcp
+    timeout: 10000
+    buffer-size: 1048576
+
+flv:
+  server:
+    enabled: true
+    host: 127.0.0.1
+    port: 8086
+    rtmp-port: 1935
+    secret: flv-live-secret-2024

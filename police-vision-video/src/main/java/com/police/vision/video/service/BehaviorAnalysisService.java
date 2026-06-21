@@ -4,8 +4,10 @@ import com.police.vision.common.dto.AlertMessageDTO;
 import com.police.vision.common.enums.AlertTypeEnum;
 import com.police.vision.common.util.MqUtil;
 import com.police.vision.common.util.SnowflakeIdUtil;
+import com.police.vision.video.client.Yolov8Client;
 import com.police.vision.video.entity.AlertRecord;
 import com.police.vision.video.entity.CameraDevice;
+import com.police.vision.video.entity.VideoStorage;
 import com.police.vision.video.mapper.AlertRecordMapper;
 import com.police.vision.video.mapper.CameraDeviceMapper;
 import lombok.RequiredArgsConstructor;
@@ -26,33 +28,16 @@ public class BehaviorAnalysisService {
     private final AlertRecordMapper alertRecordMapper;
     private final CameraDeviceMapper cameraDeviceMapper;
     private final MqUtil mqUtil;
-    private final VideoStorageService videoStorageService;
+    private final Yolov8Client yolov8Client;
+    private final VideoClipService videoClipService;
 
-    public Map<String, Object> analyzeBehavior(String streamUrl, String cameraId) {
+    public Map<String, Object> analyzeBehavior(byte[] frame, String cameraId) {
         try {
-            log.info("开始行为分析：streamUrl={}, cameraId={}", streamUrl, cameraId);
-            Map<String, Object> result = new HashMap<>();
-            AlertTypeEnum[] behaviorTypes = {
-                    AlertTypeEnum.FIGHT_DETECTED,
-                    AlertTypeEnum.CROWD_GATHERING,
-                    AlertTypeEnum.FALL_DETECTED,
-                    AlertTypeEnum.TRESSPASSING,
-                    AlertTypeEnum.ABNORMAL_BEHAVIOR,
-                    AlertTypeEnum.FIRE_DETECTED
-            };
-            boolean detected = Math.random() > 0.7;
-            result.put("detected", detected);
-            if (detected) {
-                AlertTypeEnum behavior = behaviorTypes[(int) (Math.random() * behaviorTypes.length)];
-                result.put("behaviorType", behavior.getCode());
-                result.put("behaviorName", behavior.getName());
-                result.put("confidence", 0.7 + Math.random() * 0.3);
-                log.info("行为分析检测到异常：{}", result);
-            } else {
-                result.put("behaviorType", 0);
-                result.put("behaviorName", "正常");
-                result.put("confidence", 0.9);
-                log.debug("行为分析未检测到异常");
+            log.info("调用YOLOv8行为分析：cameraId={}, frameSize={} bytes", cameraId, frame != null ? frame.length : 0);
+            Map<String, Object> result = yolov8Client.analyzeBehavior(frame);
+            if (Boolean.TRUE.equals(result.get("detected"))) {
+                log.info("行为分析检测到异常：behaviorType={}, behaviorName={}, confidence={}",
+                        result.get("behaviorType"), result.get("behaviorName"), result.get("confidence"));
             }
             return result;
         } catch (Exception e) {
@@ -65,6 +50,60 @@ public class BehaviorAnalysisService {
             result.put("error", e.getMessage());
             return result;
         }
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> processBehaviorFrame(byte[] frame, String cameraId) {
+        Map<String, Object> result = analyzeBehavior(frame, cameraId);
+
+        if (Boolean.TRUE.equals(result.get("detected"))) {
+            Integer behaviorType = (Integer) result.get("behaviorType");
+            CameraDevice camera = cameraDeviceMapper.selectByDeviceId(cameraId);
+
+            VideoStorage videoClip = null;
+            try {
+                videoClip = videoClipService.captureAlertVideo(cameraId, LocalDateTime.now());
+                log.info("行为分析告警视频截取完成：storageId={}", videoClip.getStorageId());
+            } catch (Exception e) {
+                log.error("截取行为分析告警视频失败：{}", e.getMessage());
+            }
+
+            AlertTypeEnum alertType = AlertTypeEnum.getByCode(behaviorType);
+            AlertMessageDTO alert = new AlertMessageDTO();
+            alert.setAlertId("A" + SnowflakeIdUtil.nextId());
+            alert.setAlertType(alertType != null ? alertType.getCode() : AlertTypeEnum.ABNORMAL_BEHAVIOR.getCode());
+            alert.setAlertName(alertType != null ? alertType.getName() : "异常行为");
+            alert.setAlertLevel(alertType != null ? alertType.getLevel() : 2);
+            alert.setCameraId(cameraId);
+            alert.setCameraName(camera != null ? camera.getDeviceName() : "");
+            alert.setLongitude(camera != null ? camera.getLongitude() : null);
+            alert.setLatitude(camera != null ? camera.getLatitude() : null);
+            alert.setDescription((String) result.get("behaviorName") + "检测告警");
+            alert.setAlertTime(LocalDateTime.now());
+            if (videoClip != null) {
+                try {
+                    alert.setVideoClipUrl(videoClipService.getVideoUrl(videoClip.getFilePath()));
+                } catch (Exception e) {
+                    log.warn("获取告警视频URL失败：{}", e.getMessage());
+                }
+            }
+
+            Map<String, Object> extra = new HashMap<>();
+            extra.put("confidence", result.get("confidence"));
+            extra.put("peopleCount", result.get("peopleCount"));
+            extra.put("bbox", result.get("bbox"));
+            extra.put("trackId", result.get("trackId"));
+            extra.put("videoStorageId", videoClip != null ? videoClip.getStorageId() : null);
+            alert.setExtraData(extra);
+
+            sendAlert(alert);
+            result.put("alertSent", true);
+            result.put("alertId", alert.getAlertId());
+        } else {
+            result.put("alertSent", false);
+        }
+
+        return result;
     }
 
     @Transactional(rollbackFor = Exception.class)

@@ -28,14 +28,11 @@ import {
 } from '@/types';
 
 import {
-  getStats,
+  getDashboardOverview,
   getAlarmList,
   getAlertList,
   getPoliceForceList,
   getCameraList,
-  getAlarmTypeDistribution,
-  getAlertLevelDistribution,
-  getHeatmapData,
   handleAlarm as handleAlarmApi,
   handleAlert as handleAlertApi
 } from '@/services/api';
@@ -74,36 +71,45 @@ const Screen: React.FC = () => {
 
   const loadData = useCallback(async () => {
     try {
-      const [
-        statsRes,
-        alarmsRes,
-        alertsRes,
-        policeRes,
-        camerasRes,
-        alarmTypeRes,
-        alertLevelRes,
-        heatmapRes
-      ] = await Promise.all([
-        getStats(),
+      const overviewRes = await getDashboardOverview();
+      const data = overviewRes.data;
+
+      if (data.stats) {
+        setStats(data.stats);
+      }
+      if (data.gis?.policeForces) {
+        setPoliceForces(data.gis.policeForces);
+      }
+      if (data.gis?.cameras) {
+        setCameras(data.gis.cameras);
+      }
+      if (data.gis?.heatmapData) {
+        setHeatmapData(data.gis.heatmapData);
+      }
+      if (data.alarm?.alarmTypeDistribution) {
+        setAlarmTypeData(data.alarm.alarmTypeDistribution);
+      }
+      if (data.alarm?.alertLevelDistribution) {
+        setAlertLevelData(data.alarm.alertLevelDistribution);
+      }
+      if (data.alarm?.recentAlarms) {
+        setAlarms(data.alarm.recentAlarms);
+      }
+      if (data.video?.recentAlerts) {
+        setAlerts(data.video.recentAlerts);
+      }
+    } catch (error) {
+      console.error('Load data error:', error);
+      const [alarmsRes, alertsRes, policeRes, camerasRes] = await Promise.all([
         getAlarmList({ size: 20 }),
         getAlertList({ size: 20 }),
         getPoliceForceList(),
-        getCameraList(),
-        getAlarmTypeDistribution(),
-        getAlertLevelDistribution(),
-        getHeatmapData()
+        getCameraList()
       ]);
-
-      setStats(statsRes.data);
       setAlarms(alarmsRes.data);
       setAlerts(alertsRes.data);
       setPoliceForces(policeRes.data);
       setCameras(camerasRes.data);
-      setAlarmTypeData(alarmTypeRes.data);
-      setAlertLevelData(alertLevelRes.data);
-      setHeatmapData(heatmapRes.data);
-    } catch (error) {
-      console.error('Load data error:', error);
     } finally {
       setLoading(false);
     }

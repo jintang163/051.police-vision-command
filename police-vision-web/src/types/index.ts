@@ -87,10 +87,30 @@ export interface HeatmapPoint {
   count: number;
 }
 
+export interface DashboardOverview {
+  gis: {
+    policeForces: PoliceForce[];
+    heatmapData: HeatmapPoint[];
+    cameras: Camera[];
+  };
+  alarm: {
+    alarmTypeDistribution: ChartData[];
+    alertLevelDistribution: ChartData[];
+    recentAlarms: Alarm[];
+    pendingAlarmCount: number;
+  };
+  video: {
+    onlineCameraCount: number;
+    totalCameraCount: number;
+    recentAlerts: Alert[];
+  };
+  stats: StatsData;
+}
+
 export interface WebSocketMessage {
-  type: 'alarm' | 'alert' | 'stats' | 'police' | 'heartbeat';
-  data: Alarm | Alert | StatsData | PoliceForce;
-  timestamp: string;
+  type: 'alarm' | 'alert' | 'stats' | 'police' | 'heartbeat' | 'new_alarm' | 'video_alert' | 'real_time_stats' | 'police_location' | 'dispatch_order' | 'new_dispatch';
+  data: Alarm | Alert | StatsData | PoliceForce | any;
+  timestamp: number;
 }
 
 export interface MapLayer {

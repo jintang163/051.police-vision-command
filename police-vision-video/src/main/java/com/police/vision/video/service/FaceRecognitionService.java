@@ -10,9 +10,11 @@ import com.police.vision.common.enums.AlertTypeEnum;
 import com.police.vision.common.util.MqUtil;
 import com.police.vision.common.util.RedisUtil;
 import com.police.vision.common.util.SnowflakeIdUtil;
+import com.police.vision.video.client.ArcFaceClient;
 import com.police.vision.video.entity.CameraDevice;
 import com.police.vision.video.entity.FaceRecord;
 import com.police.vision.video.entity.TargetPerson;
+import com.police.vision.video.entity.VideoStorage;
 import com.police.vision.video.mapper.CameraDeviceMapper;
 import com.police.vision.video.mapper.FaceRecordMapper;
 import com.police.vision.video.mapper.TargetPersonMapper;
@@ -37,30 +39,48 @@ public class FaceRecognitionService {
     private final ElasticsearchClient elasticsearchClient;
     private final RedisUtil redisUtil;
     private final MqUtil mqUtil;
+    private final ArcFaceClient arcFaceClient;
+    private final VideoClipService videoClipService;
 
     private static final String FACE_INDEX = "target_person_faces";
     private static final float DEFAULT_THRESHOLD = 0.8f;
 
     public float[] extractFaceFeature(byte[] image) {
         try {
-            log.info("提取人脸特征，图片大小：{} bytes", image.length);
-            float[] feature = new float[512];
-            Random random = new Random(image.length);
-            for (int i = 0; i < 512; i++) {
-                feature[i] = random.nextFloat() * 2 - 1;
-            }
-            float norm = 0;
-            for (float v : feature) {
-                norm += v * v;
-            }
-            norm = (float) Math.sqrt(norm);
-            for (int i = 0; i < 512; i++) {
-                feature[i] /= norm;
-            }
-            return feature;
+            log.info("调用ArcFace提取人脸特征，图片大小：{} bytes", image.length);
+            return arcFaceClient.extractFeature(image);
         } catch (Exception e) {
             log.error("提取人脸特征失败：", e);
             throw new RuntimeException("人脸特征提取失败", e);
+        }
+    }
+
+    public Map<String, Object> detectAndExtractFace(byte[] image) {
+        try {
+            log.info("人脸检测与特征提取，图片大小：{} bytes", image.length);
+            float[] feature = extractFaceFeature(image);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("detected", feature != null && feature.length > 0);
+            result.put("feature", feature);
+
+            if (feature != null && feature.length > 0) {
+                List<Map<String, Object>> searchResults = searchFaceByFeature(feature, DEFAULT_THRESHOLD);
+                result.put("matches", searchResults);
+                if (!searchResults.isEmpty()) {
+                    Map<String, Object> bestMatch = searchResults.get(0);
+                    result.put("bestMatch", bestMatch);
+                    result.put("similarity", bestMatch.get("similarity"));
+                }
+            }
+
+            return result;
+        } catch (Exception e) {
+            log.error("人脸检测失败：", e);
+            Map<String, Object> result = new HashMap<>();
+            result.put("detected", false);
+            result.put("error", e.getMessage());
+            return result;
         }
     }
 
@@ -163,6 +183,18 @@ public class FaceRecognitionService {
             TargetPerson target = targetPersonMapper.selectByPersonId(record.getPersonId());
             if (target != null && target.getStatus() == 1) {
                 CameraDevice camera = cameraDeviceMapper.selectByDeviceId(record.getCameraId());
+
+                VideoStorage videoClip = null;
+                try {
+                    videoClip = videoClipService.captureAlertVideo(
+                            record.getCameraId(),
+                            record.getDetectTime()
+                    );
+                    log.info("人脸匹配告警视频截取完成：storageId={}", videoClip.getStorageId());
+                } catch (Exception e) {
+                    log.error("截取人脸匹配告警视频失败：{}", e.getMessage());
+                }
+
                 AlertMessageDTO alert = new AlertMessageDTO();
                 alert.setAlertId("A" + SnowflakeIdUtil.nextId());
                 alert.setAlertType(AlertTypeEnum.FACE_MATCH.getCode());
@@ -178,13 +210,22 @@ public class FaceRecognitionService {
                 alert.setAlertTime(record.getDetectTime());
                 alert.setTargetPersonId(record.getPersonId());
                 alert.setTargetPersonName(record.getPersonName());
+                if (videoClip != null) {
+                    try {
+                        alert.setVideoClipUrl(videoClipService.getVideoUrl(videoClip.getFilePath()));
+                    } catch (Exception e) {
+                        log.warn("获取告警视频URL失败：{}", e.getMessage());
+                    }
+                }
                 Map<String, Object> extra = new HashMap<>();
                 extra.put("similarity", record.getSimilarity());
                 extra.put("idCardNo", target.getIdCardNo());
+                extra.put("videoStorageId", videoClip != null ? videoClip.getStorageId() : null);
                 alert.setExtraData(extra);
                 mqUtil.sendVideoAlert(alert);
-                log.info("人脸匹配告警已发送：personId={}, similarity={}",
-                        record.getPersonId(), record.getSimilarity());
+                log.info("人脸匹配告警已发送：personId={}, similarity={}, videoStorageId={}",
+                        record.getPersonId(), record.getSimilarity(),
+                        videoClip != null ? videoClip.getStorageId() : null);
             }
         }
     }

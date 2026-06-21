@@ -103,6 +103,8 @@ public class DispatchService {
 
             sendDispatchTimeoutMessage(alarmId);
 
+            sendDispatchNotifications(record, alarmOrder, policeIds);
+
             log.info("自动派单成功，警情ID：{}，派单警力：{}", alarmId, policeIds);
             return record;
 
@@ -134,8 +136,36 @@ public class DispatchService {
 
         sendDispatchTimeoutMessage(dto.getAlarmId());
 
-        log.info("人工派单成功，警情ID：{}，派单警力：{}", dto.getAlarmId(), dto.getPoliceIds());
-        return record;
+            sendDispatchNotifications(record, alarmOrder, dto.getPoliceIds());
+
+            log.info("人工派单成功，警情ID：{}，派单警力：{}", dto.getAlarmId(), dto.getPoliceIds());
+            return record;
+        }
+    }
+
+    private void sendDispatchNotifications(DispatchRecord record, AlarmOrder alarmOrder, List<Long> policeIds) {
+        mqUtil.sendWebsocketScreenPush(mqUtil.buildWebSocketMessage("dispatch_order", record));
+
+        for (Long policeId : policeIds) {
+            java.util.Map<String, Object> dispatchMsg = new java.util.HashMap<>();
+            dispatchMsg.put("dispatchId", record.getId());
+            dispatchMsg.put("dispatchNo", record.getDispatchNo());
+            dispatchMsg.put("alarmId", alarmOrder.getId());
+            dispatchMsg.put("alarmNo", alarmOrder.getAlarmNo());
+            dispatchMsg.put("alarmType", alarmOrder.getAlarmType());
+            dispatchMsg.put("alarmContent", alarmOrder.getContent());
+            dispatchMsg.put("address", alarmOrder.getAddress());
+            dispatchMsg.put("longitude", alarmOrder.getLongitude());
+            dispatchMsg.put("latitude", alarmOrder.getLatitude());
+            dispatchMsg.put("priority", record.getPriority());
+            dispatchMsg.put("dispatchRemark", record.getDispatchRemark());
+            dispatchMsg.put("dispatchTime", record.getDispatchTime());
+            dispatchMsg.put("policeId", policeId);
+
+            java.util.Map<String, Object> wsMsg = mqUtil.buildWebSocketMessage("new_dispatch", dispatchMsg);
+            wsMsg.put("policeId", policeId);
+            mqUtil.sendWebsocketScreenPush(wsMsg);
+        }
     }
 
     public DispatchRecord getDispatchRecord(Long alarmId) {
