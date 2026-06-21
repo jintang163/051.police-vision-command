@@ -44,6 +44,8 @@ public class OfficerEtaResultDTO implements Serializable {
 
     private String roadNames;
 
+    private String routeName;
+
     private Integer calculateVersion;
 
     private LocalDateTime calculateTime;

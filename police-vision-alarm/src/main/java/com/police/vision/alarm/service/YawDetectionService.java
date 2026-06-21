@@ -9,6 +9,7 @@ import com.police.vision.alarm.mapper.DispatchRecordMapper;
 import com.police.vision.common.constant.RedisConstant;
 import com.police.vision.common.dto.OfficerEtaResultDTO;
 import com.police.vision.common.dto.YawDetectionResultDTO;
+import com.police.vision.common.entity.DispatchTrafficSnapshot;
 import com.police.vision.common.entity.GpsLocation;
 import com.police.vision.common.util.MqUtil;
 import com.police.vision.common.util.RedisUtil;
@@ -30,6 +31,7 @@ public class YawDetectionService {
 
     private final RedisUtil redisUtil;
     private final AmapRouteClientService amapRouteClientService;
+    private final SmartDispatchService smartDispatchService;
     private final DispatchRecordMapper dispatchRecordMapper;
     private final AlarmOrderMapper alarmOrderMapper;
     private final MqUtil mqUtil;
@@ -85,9 +87,14 @@ public class YawDetectionService {
                             BigDecimal.valueOf(p2[0]), BigDecimal.valueOf(p2[1]));
                     if (deviation != null && deviation.doubleValue() > maxDeviation) {
                         maxDeviation = deviation.doubleValue();
-                        double t = 0.5;
-                        expectedLon = BigDecimal.valueOf(p1[0] + (p2[0] - p1[0]) * t);
-                        expectedLat = BigDecimal.valueOf(p1[1] + (p2[1] - p1[1]) * t);
+                        double dx = p2[0] - p1[0];
+                        double dy = p2[1] - p1[1];
+                        double lenSq = dx * dx + dy * dy;
+                        double t = lenSq > 0
+                                ? Math.max(0, Math.min(1, ((currentLon.doubleValue() - p1[0]) * dx + (currentLat.doubleValue() - p1[1]) * dy) / lenSq))
+                                : 0.5;
+                        expectedLon = BigDecimal.valueOf(p1[0] + t * dx);
+                        expectedLat = BigDecimal.valueOf(p1[1] + t * dy);
                     }
                 }
             } else {
@@ -129,6 +136,8 @@ public class YawDetectionService {
 
                 updateDispatchWithNewRoute(dispatchId, policeId, newEta);
 
+                updateYawCheckRoute(dispatchId, policeId, newEta.getRoutePolyline());
+
                 notifyReroute(dispatch, alarm, policeId, newEta);
 
                 log.warn("【偏航重算】派单{}警员{}偏航{}次，已自动重算路线，新ETA: {}分钟",
@@ -150,6 +159,7 @@ public class YawDetectionService {
         if (activeKeys == null || activeKeys.isEmpty()) return;
 
         int checked = 0;
+        int yawDetected = 0;
         for (String key : activeKeys) {
             try {
                 Map<String, Object> meta = redisUtil.getMap(key);
@@ -157,21 +167,43 @@ public class YawDetectionService {
 
                 Long dispatchId = toLong(meta.get("dispatchId"));
                 Long policeId = toLong(meta.get("policeId"));
-                BigDecimal lon = toBigDecimal(meta.get("lon"));
-                BigDecimal lat = toBigDecimal(meta.get("lat"));
-                String polyline = (String) meta.get("polyline");
+                String polyline = meta.get("polyline") != null ? meta.get("polyline").toString() : null;
 
-                if (dispatchId != null && policeId != null && lon != null && lat != null) {
-                    checkYaw(dispatchId, policeId, lon, lat, polyline);
-                    checked++;
+                if (dispatchId == null || policeId == null) continue;
+
+                BigDecimal[] realtimeLocation = readRealtimeLocation(policeId);
+                if (realtimeLocation == null) continue;
+
+                BigDecimal lon = realtimeLocation[0];
+                BigDecimal lat = realtimeLocation[1];
+
+                YawDetectionResultDTO yawResult = checkYaw(dispatchId, policeId, lon, lat, polyline);
+                checked++;
+                if (Boolean.TRUE.equals(yawResult.getYaw())) {
+                    yawDetected++;
                 }
             } catch (Exception e) {
                 log.warn("批量偏航检查失败：{}", e.getMessage());
             }
         }
         if (checked > 0) {
-            log.debug("批量偏航检查完成，检查数：{}", checked);
+            log.info("批量偏航检查完成：检查数={}, 偏航数={}", checked, yawDetected);
         }
+    }
+
+    private BigDecimal[] readRealtimeLocation(Long policeId) {
+        String locationKey = RedisConstant.POLICE_LOCATION_PREFIX + policeId;
+        String locationStr = redisUtil.get(locationKey);
+        if (locationStr == null) return null;
+        try {
+            GpsLocation gps = JSON.parseObject(locationStr, GpsLocation.class);
+            if (gps != null && gps.getLongitude() != null && gps.getLatitude() != null) {
+                return new BigDecimal[]{gps.getLongitude(), gps.getLatitude()};
+            }
+        } catch (Exception e) {
+            log.warn("解析警员{}实时定位失败：{}", policeId, e.getMessage());
+        }
+        return null;
     }
 
     public void registerDispatchYawCheck(Long dispatchId, Long policeId,
@@ -181,10 +213,19 @@ public class YawDetectionService {
         Map<String, Object> meta = new HashMap<>();
         meta.put("dispatchId", dispatchId);
         meta.put("policeId", policeId);
-        meta.put("lon", lon);
-        meta.put("lat", lat);
-        meta.put("polyline", polyline);
+        meta.put("polyline", polyline != null ? polyline : "");
+        meta.put("registerTime", System.currentTimeMillis());
         redisUtil.setMap(key, meta, RedisConstant.DISPATCH_YAW_EXPIRE, TimeUnit.SECONDS);
+    }
+
+    private void updateYawCheckRoute(Long dispatchId, Long policeId, String newPolyline) {
+        String key = RedisConstant.DISPATCH_YAW_CHECK_PREFIX + dispatchId + "_" + policeId;
+        if (!Boolean.TRUE.equals(redisUtil.hasKey(key))) return;
+        Map<String, Object> meta = redisUtil.getMap(key);
+        if (meta == null) return;
+        meta.put("polyline", newPolyline != null ? newPolyline : "");
+        redisUtil.setMap(key, meta, RedisConstant.DISPATCH_YAW_EXPIRE, TimeUnit.SECONDS);
+        log.debug("偏航检测路线已更新：dispatchId={}, policeId={}", dispatchId, policeId);
     }
 
     public void unregisterDispatchYawCheck(Long dispatchId, Long policeId) {
@@ -218,15 +259,14 @@ public class YawDetectionService {
         List<double[]> points = new ArrayList<>();
         if (polyline == null || polyline.isEmpty()) return points;
         try {
-            for (String seg : polyline.split(";")) {
-                for (String point : seg.split(";")) {
-                    String[] xy = point.split(",");
-                    if (xy.length == 2) {
-                        points.add(new double[]{
-                                Double.parseDouble(xy[0]),
-                                Double.parseDouble(xy[1])
-                        });
-                    }
+            String[] segments = polyline.split(";");
+            for (String seg : segments) {
+                String[] coords = seg.split(",");
+                if (coords.length == 2) {
+                    points.add(new double[]{
+                            Double.parseDouble(coords[0]),
+                            Double.parseDouble(coords[1])
+                    });
                 }
             }
         } catch (Exception e) {
@@ -243,14 +283,15 @@ public class YawDetectionService {
             rec.setYawRecalcCount(count + 1);
             rec.setLastRecalcReason("偏航自动重算");
             rec.setLastRecalcTime(LocalDateTime.now());
+            if (newEta.getEtaSeconds() != null) {
+                rec.setFastestEtaSeconds(newEta.getEtaSeconds());
+            }
             dispatchRecordMapper.updateById(rec);
         }
     }
 
     private void notifyReroute(DispatchRecord dispatch, AlarmOrder alarm,
                          Long policeId, OfficerEtaResultDTO newEta) {
-        Map<String, Object> msg = new HashMap<>();
-        msg.put("type", "dispatch_reroute");
         Map<String, Object> data = new HashMap<>();
         data.put("dispatchId", dispatch.getId());
         data.put("dispatchNo", dispatch.getDispatchNo());
@@ -259,23 +300,27 @@ public class YawDetectionService {
         data.put("newEta", newEta.getEtaDisplay());
         data.put("newEtaSeconds", newEta.getEtaSeconds());
         data.put("newRoute", newEta.getRoutePolyline());
+        data.put("roadDistance", newEta.getRoadDistance());
+        data.put("trafficLevel", newEta.getTrafficLevel());
         data.put("reason", "偏航自动重算路线");
-        msg.put("data", data);
-        mqUtil.sendWebsocketScreenPush(msg);
+        data.put("timestamp", System.currentTimeMillis());
+
+        Map<String, Object> wsMsg = mqUtil.buildWebSocketMessage("dispatch_reroute", data);
+        mqUtil.sendWebsocketScreenPush(wsMsg);
 
         Map<String, Object> mobileMsg = new HashMap<>();
         mobileMsg.put("type", "reroute");
         mobileMsg.put("dispatchNo", dispatch.getDispatchNo());
         mobileMsg.put("newRoute", newEta.getRoutePolyline());
         mobileMsg.put("eta", newEta.getEtaDisplay());
+        mobileMsg.put("etaSeconds", newEta.getEtaSeconds());
         mqUtil.sendDispatchNotifyPolice(policeId, mobileMsg);
     }
 
     private void saveDispatchTrack(Long dispatchId, Long policeId,
                                BigDecimal lon, BigDecimal lat) {
-        String key = RedisConstant.DISPATCH_TRACK_PREFIX + dispatchId;
+        String listKey = RedisConstant.DISPATCH_TRACK_PREFIX + dispatchId + ":track";
         GpsLocation loc = new GpsLocation(lon, lat, LocalDateTime.now(), policeId);
-        String listKey = key + ":track";
         redisUtil.leftPush(listKey, JSON.toJSONString(loc));
     }
 

@@ -16,6 +16,7 @@ import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URLEncoder;
@@ -39,6 +40,7 @@ public class AmapRouteClientService {
 
     private static final double EARTH_RADIUS_KM = 6371.0088;
 
+    @PostConstruct
     public void init() {
         try {
             httpClient = HttpClients.custom()
@@ -193,6 +195,7 @@ public class AmapRouteClientService {
                 .etaSeconds(duration)
                 .trafficLevel((int) Math.round(trafficLevel))
                 .routePolyline(polyline)
+                .routeName(roads)
                 .strategy(amapConfig.getStrategy())
                 .trafficLightsCount(trafficLights)
                 .avgSpeed(avgSpeed)
@@ -253,7 +256,11 @@ public class AmapRouteClientService {
     }
 
     private String doGet(String url) throws Exception {
-        if (httpClient == null) init();
+        if (httpClient == null) {
+            synchronized (this) {
+                if (httpClient == null) init();
+            }
+        }
         HttpGet httpGet = new HttpGet(url);
         httpGet.setHeader("Connection", "keep-alive");
         return httpClient.execute(httpGet, response ->

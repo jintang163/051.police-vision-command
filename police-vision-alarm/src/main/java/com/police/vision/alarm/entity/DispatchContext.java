@@ -62,6 +62,10 @@ public class DispatchContext {
 
     private String dispatchVersion;
 
+    private BigDecimal savedEtaPercent;
+
+    private AmapTrafficStatusDTO rawTrafficData;
+
     private LocalDateTime calculateTime;
 
     private String remark;

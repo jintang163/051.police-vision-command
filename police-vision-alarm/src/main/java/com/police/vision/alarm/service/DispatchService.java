@@ -451,6 +451,7 @@ public class DispatchService {
             record.setFastestEtaSeconds(ctx.getFastestEtaSeconds());
             record.setFastestPoliceId(ctx.getFastestPoliceId());
             record.setAvgTrafficLevel(ctx.getAvgTrafficLevel());
+            record.setSavedEtaPercent(ctx.getSavedEtaPercent());
             record.setPoliceCount(policeIds != null ? policeIds.size() : 0);
             if (ctx.getMultiDispatchPlan() != null) {
                 record.setRendezvousLongitude(ctx.getMultiDispatchPlan().getRendezvousLongitude());
