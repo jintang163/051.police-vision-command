@@ -11,6 +11,9 @@ public class FlinkConfig {
 
     private String name = "PoliceVisionFlinkJob";
     private int parallelism = 4;
+    private String nameServer = "127.0.0.1:9876";
+    private String faceCaptureTopic = "police-face-capture-topic";
+    private String websocketPushTopic = "police-websocket-push-topic";
     private CheckpointConfig checkpoint = new CheckpointConfig();
     private StateConfig state = new StateConfig();
 

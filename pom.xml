@@ -21,6 +21,7 @@
         <module>police-vision-websocket</module>
         <module>police-vision-flink</module>
         <module>police-vision-mobile</module>
+        <module>police-vision-control</module>
     </modules>
 
     <properties>

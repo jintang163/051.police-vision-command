@@ -847,6 +847,203 @@ CREATE TABLE `police_status_log` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='警员状态日志表';
 
 -- =============================================
+-- 7.6 重点人员管控模块
+-- =============================================
+
+-- 扩展target_person表（兼容原有的字段命名，添加人员管控所需字段）
+ALTER TABLE `target_person`
+    ADD COLUMN IF NOT EXISTS `person_type` VARCHAR(32) COMMENT '人员分类: CRIMINAL-前科人员 APPEAL-上访人员 MENTAL-精神障碍 DRUG-涉毒 TERROR-涉恐 OTHER-其他',
+    ADD COLUMN IF NOT EXISTS `person_type_name` VARCHAR(64) COMMENT '人员分类名称',
+    ADD COLUMN IF NOT EXISTS `age` INT COMMENT '年龄',
+    ADD COLUMN IF NOT EXISTS `avatar_url` VARCHAR(512) COMMENT '头像URL',
+    ADD COLUMN IF NOT EXISTS `longitude` DECIMAL(12, 8) COMMENT '常住地经度',
+    ADD COLUMN IF NOT EXISTS `latitude` DECIMAL(12, 8) COMMENT '常住地纬度',
+    ADD COLUMN IF NOT EXISTS `resident_address` VARCHAR(256) COMMENT '现居住地址',
+    ADD COLUMN IF NOT EXISTS `work_address` VARCHAR(256) COMMENT '工作地址',
+    ADD COLUMN IF NOT EXISTS `police_station_code` VARCHAR(64) COMMENT '所属派出所编码',
+    ADD COLUMN IF NOT EXISTS `police_station_name` VARCHAR(128) COMMENT '所属派出所名称',
+    ADD COLUMN IF NOT EXISTS `register_date` DATE COMMENT '登记日期',
+    ADD COLUMN IF NOT EXISTS `case_count` INT DEFAULT 0 COMMENT '案件次数',
+    ADD COLUMN IF NOT EXISTS `visit_count` INT DEFAULT 0 COMMENT '上访次数',
+    ADD COLUMN IF NOT EXISTS `alert_count` INT DEFAULT 0 COMMENT '告警次数',
+    ADD COLUMN IF NOT EXISTS `risk_score` DOUBLE DEFAULT 0 COMMENT '风险评分(0-100)',
+    ADD COLUMN IF NOT EXISTS `criminal_tags` VARCHAR(512) COMMENT '前科标签(逗号分隔: 盗窃/抢劫/故意伤害...)',
+    ADD COLUMN IF NOT EXISTS `mental_level` VARCHAR(32) COMMENT '精神障碍等级: 轻度/中度/重度',
+    ADD COLUMN IF NOT EXISTS `appeal_category` VARCHAR(64) COMMENT '上访类别: 征地拆迁/劳动保障/涉法涉诉...',
+    ADD COLUMN IF NOT EXISTS `person_id` VARCHAR(64) COMMENT '外部人员ID(与video模块兼容)',
+    ADD COLUMN IF NOT EXISTS `person_name` VARCHAR(64) COMMENT '姓名(冗余,与video模块兼容)',
+    ADD COLUMN IF NOT EXISTS `id_card_no` VARCHAR(32) COMMENT '身份证号(冗余,与video模块兼容)',
+    ADD COLUMN IF NOT EXISTS `control_level` INT COMMENT '布控级别(冗余,与target_level兼容,与video模块兼容)',
+    ADD COLUMN IF NOT EXISTS `face_feature` TEXT COMMENT '人脸特征向量(冗余,与video模块兼容)',
+    ADD COLUMN IF NOT EXISTS `remark` TEXT COMMENT '备注(冗余,与video模块兼容)';
+
+DROP TABLE IF EXISTS `geo_fence`;
+CREATE TABLE `geo_fence` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `fence_id` VARCHAR(64) NOT NULL COMMENT '围栏ID',
+    `fence_name` VARCHAR(128) NOT NULL COMMENT '围栏名称',
+    `fence_type` VARCHAR(32) NOT NULL COMMENT '围栏类型: sensitive-敏感区域 goverment-党政机关 school-学校 hospital-医院 station-交通枢纽 market-商业中心 residence-居民区 border-辖区边界 forbidden-禁入区域',
+    `fence_type_name` VARCHAR(64) COMMENT '围栏类型名称',
+    `fence_level` TINYINT DEFAULT 1 COMMENT '围栏级别: 1-关注 2-重要 3-核心 4-禁止',
+    `center_longitude` DECIMAL(12, 8) COMMENT '中心点经度',
+    `center_latitude` DECIMAL(12, 8) COMMENT '中心点纬度',
+    `radius` DECIMAL(12, 2) COMMENT '圆形围栏半径(米)',
+    `polygon_points` TEXT COMMENT '多边形围栏坐标(经度1,纬度1;经度2,纬度2;...)',
+    `police_station_code` VARCHAR(64) COMMENT '所属派出所编码',
+    `police_station_name` VARCHAR(128) COMMENT '所属派出所名称',
+    `description` VARCHAR(512) COMMENT '围栏描述',
+    `enabled` TINYINT DEFAULT 1 COMMENT '是否启用: 0-停用 1-启用',
+    `fence_tags` VARCHAR(256) COMMENT '标签(逗号分隔)',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `create_by` BIGINT COMMENT '创建人',
+    `update_by` BIGINT COMMENT '更新人',
+    `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_fence_id` (`fence_id`),
+    KEY `idx_fence_type` (`fence_type`),
+    KEY `idx_enabled` (`enabled`),
+    KEY `idx_station_code` (`police_station_code`),
+    KEY `idx_center_location` (`center_longitude`, `center_latitude`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='电子围栏表';
+
+DROP TABLE IF EXISTS `fence_alert`;
+CREATE TABLE `fence_alert` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `alert_id` VARCHAR(64) NOT NULL COMMENT '告警ID',
+    `alert_no` VARCHAR(64) NOT NULL COMMENT '告警编号',
+    `person_id` VARCHAR(64) COMMENT '重点人员ID',
+    `person_name` VARCHAR(64) COMMENT '重点人员姓名',
+    `person_type` VARCHAR(32) COMMENT '人员类型',
+    `alert_level` TINYINT DEFAULT 1 COMMENT '告警级别: 1-一般 2-重要 3-严重 4-特别严重',
+    `fence_id` VARCHAR(64) COMMENT '围栏ID',
+    `fence_name` VARCHAR(128) COMMENT '围栏名称',
+    `fence_type` VARCHAR(32) COMMENT '围栏类型',
+    `alert_longitude` DECIMAL(12, 8) COMMENT '告警地点经度',
+    `alert_latitude` DECIMAL(12, 8) COMMENT '告警地点纬度',
+    `camera_id` VARCHAR(64) COMMENT '抓拍摄像头ID',
+    `camera_name` VARCHAR(128) COMMENT '抓拍摄像头名称',
+    `alert_type` TINYINT DEFAULT 1 COMMENT '告警类型: 1-进入围栏 2-离开围栏 3-长时间停留 4-异常徘徊',
+    `alert_type_name` VARCHAR(32) COMMENT '告警类型名称',
+    `alert_time` DATETIME NOT NULL COMMENT '告警时间',
+    `leave_time` DATETIME COMMENT '离开时间',
+    `status` TINYINT DEFAULT 0 COMMENT '状态: 0-在围栏内 1-已离开 2-已处理',
+    `status_name` VARCHAR(32) COMMENT '状态名称',
+    `snapshot_url` VARCHAR(512) COMMENT '抓拍照片URL',
+    `video_clip_url` VARCHAR(512) COMMENT '告警视频URL',
+    `description` VARCHAR(1024) COMMENT '告警描述',
+    `handle_remark` VARCHAR(1024) COMMENT '处理备注',
+    `handle_officer_id` BIGINT COMMENT '处理警员ID',
+    `handle_time` DATETIME COMMENT '处理时间',
+    `police_station_code` VARCHAR(64) COMMENT '所属派出所编码',
+    `police_station_name` VARCHAR(128) COMMENT '所属派出所名称',
+    `visitor_pushed` TINYINT DEFAULT 0 COMMENT '是否已推送民警: 0-否 1-是',
+    `visitor_push_time` DATETIME COMMENT '推送民警时间',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `create_by` BIGINT COMMENT '创建人',
+    `update_by` BIGINT COMMENT '更新人',
+    `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_alert_id` (`alert_id`),
+    KEY `idx_person_id` (`person_id`),
+    KEY `idx_fence_id` (`fence_id`),
+    KEY `idx_alert_time` (`alert_time`),
+    KEY `idx_status` (`status`),
+    KEY `idx_alert_level` (`alert_level`),
+    KEY `idx_station_code` (`police_station_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='电子围栏告警表';
+
+DROP TABLE IF EXISTS `aggregation_alert`;
+CREATE TABLE `aggregation_alert` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `alert_id` VARCHAR(64) NOT NULL COMMENT '告警ID',
+    `alert_no` VARCHAR(64) NOT NULL COMMENT '告警编号',
+    `area_code` VARCHAR(64) COMMENT '区域编码',
+    `area_name` VARCHAR(128) COMMENT '区域名称',
+    `center_longitude` DECIMAL(12, 8) COMMENT '聚集中心经度',
+    `center_latitude` DECIMAL(12, 8) COMMENT '聚集中心纬度',
+    `person_count` INT DEFAULT 0 COMMENT '聚集总人数',
+    `person_ids` TEXT COMMENT '聚集人员ID列表(逗号分隔)',
+    `person_names` TEXT COMMENT '聚集人员姓名列表(逗号分隔)',
+    `target_person_count` INT DEFAULT 0 COMMENT '重点人员数量',
+    `target_person_ids` TEXT COMMENT '重点人员ID列表(逗号分隔)',
+    `target_person_names` TEXT COMMENT '重点人员姓名列表(逗号分隔)',
+    `alert_level` TINYINT DEFAULT 2 COMMENT '告警级别: 1-一般 2-重要 3-严重 4-特别严重',
+    `start_time` DATETIME COMMENT '聚集开始时间',
+    `end_time` DATETIME COMMENT '聚集结束时间',
+    `duration_seconds` INT DEFAULT 0 COMMENT '持续时长(秒)',
+    `camera_ids` TEXT COMMENT '关联摄像头ID列表(逗号分隔)',
+    `snapshot_urls` TEXT COMMENT '抓拍快照URL列表(逗号分隔)',
+    `status` TINYINT DEFAULT 0 COMMENT '状态: 0-待处理 1-处理中 2-已处理 3-已忽略',
+    `status_name` VARCHAR(32) COMMENT '状态名称',
+    `description` VARCHAR(2048) COMMENT '聚集描述',
+    `handle_remark` VARCHAR(2048) COMMENT '处理备注',
+    `handle_officer_id` BIGINT COMMENT '处理警员ID',
+    `handle_time` DATETIME COMMENT '处理时间',
+    `police_station_code` VARCHAR(64) COMMENT '所属派出所编码',
+    `police_station_name` VARCHAR(128) COMMENT '所属派出所名称',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `create_by` BIGINT COMMENT '创建人',
+    `update_by` BIGINT COMMENT '更新人',
+    `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_alert_id` (`alert_id`),
+    KEY `idx_area_code` (`area_code`),
+    KEY `idx_start_time` (`start_time`),
+    KEY `idx_status` (`status`),
+    KEY `idx_alert_level` (`alert_level`),
+    KEY `idx_station_code` (`police_station_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='异常聚集告警表';
+
+-- 电子围栏初始化数据
+INSERT INTO `geo_fence` (`fence_id`, `fence_name`, `fence_type`, `fence_type_name`, `fence_level`, `center_longitude`, `center_latitude`, `radius`, `police_station_code`, `police_station_name`, `description`, `enabled`) VALUES
+('GF001', '市政府大院', 'goverment', '党政机关', 3, 116.397128, 39.916527, 500, 'PCS_A', '派出所A', '市级行政中心，上访人员重点关注区域', 1),
+('GF002', '火车站广场', 'station', '交通枢纽', 3, 116.408128, 39.904527, 800, 'PCS_B', '派出所B', '人员密集交通枢纽', 1),
+('GF003', '第一实验小学', 'school', '学校', 2, 116.389128, 39.921527, 300, 'PCS_A', '派出所A', '重点小学，精神障碍人员关注', 1),
+('GF004', '中心医院', 'hospital', '医院', 2, 116.403128, 39.913527, 400, 'PCS_C', '派出所C', '三甲医院', 1),
+('GF005', 'CBD商业中心', 'market', '商业中心', 2, 116.415128, 39.918527, 1000, 'PCS_B', '派出所B', '商业密集区', 1),
+('GF006', '重点中学', 'school', '学校', 2, 116.382128, 39.908527, 400, 'PCS_C', '派出所C', '重点中学', 1),
+('GF007', '辖区A边界', 'border', '辖区边界', 3, 116.395128, 39.899527, 2000, 'PCS_A', '派出所A', '派出所A辖区南部边界', 1),
+('GF008', '上访人员禁入区', 'forbidden', '禁入区域', 4, 116.397500, 39.916600, 200, 'PCS_A', '派出所A', '市政府周边禁入区域', 1);
+
+-- 重点人员扩展示例数据
+UPDATE `target_person` SET
+    `person_type` = CASE
+        WHEN `id` % 3 = 0 THEN 'CRIMINAL'
+        WHEN `id` % 3 = 1 THEN 'APPEAL'
+        ELSE 'MENTAL'
+    END,
+    `person_type_name` = CASE
+        WHEN `id` % 3 = 0 THEN '前科人员'
+        WHEN `id` % 3 = 1 THEN '上访人员'
+        ELSE '精神障碍'
+    END,
+    `age` = 30 + (`id` % 30),
+    `resident_address` = `address`,
+    `risk_score` = 40 + ((`id` * 7) % 50),
+    `criminal_tags` = CASE WHEN `id` % 3 = 0 THEN '盗窃,抢劫' ELSE NULL END,
+    `mental_level` = CASE WHEN `id` % 3 = 2 THEN '中度' ELSE NULL END,
+    `appeal_category` = CASE WHEN `id` % 3 = 1 THEN '征地拆迁' ELSE NULL END,
+    `police_station_code` = CASE
+        WHEN `id` % 3 = 0 THEN 'PCS_A'
+        WHEN `id` % 3 = 1 THEN 'PCS_B'
+        ELSE 'PCS_C'
+    END,
+    `police_station_name` = CASE
+        WHEN `id` % 3 = 0 THEN '派出所A'
+        WHEN `id` % 3 = 1 THEN '派出所B'
+        ELSE '派出所C'
+    END,
+    `alert_count` = `warning_count`,
+    `person_id` = `person_no`,
+    `person_name` = `name`,
+    `id_card_no` = `id_card`,
+    `control_level` = `target_level`
+WHERE `person_type` IS NULL;
+
+-- =============================================
 -- 8. 索引优化说明
 -- =============================================
 -- 1. 所有表都有主键索引

@@ -4,6 +4,7 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import com.alibaba.fastjson2.JSON;
+import com.police.vision.common.constant.MqConstant;
 import com.police.vision.common.constant.RedisConstant;
 import com.police.vision.common.dto.AlertMessageDTO;
 import com.police.vision.common.enums.AlertTypeEnum;
@@ -223,6 +224,20 @@ public class FaceRecognitionService {
                 extra.put("videoStorageId", videoClip != null ? videoClip.getStorageId() : null);
                 alert.setExtraData(extra);
                 mqUtil.sendVideoAlert(alert);
+
+                Map<String, Object> controlMsg = new HashMap<>();
+                controlMsg.put("personId", record.getPersonId());
+                controlMsg.put("personName", record.getPersonName());
+                controlMsg.put("cameraId", record.getCameraId());
+                controlMsg.put("cameraName", camera != null ? camera.getDeviceName() : "");
+                controlMsg.put("longitude", record.getLongitude());
+                controlMsg.put("latitude", record.getLatitude());
+                controlMsg.put("snapshotUrl", record.getSnapshotUrl());
+                controlMsg.put("videoClipUrl", videoClip != null ? videoClipService.getVideoUrl(videoClip.getFilePath()) : null);
+                controlMsg.put("similarity", record.getSimilarity());
+                controlMsg.put("detectTime", record.getDetectTime() != null ? record.getDetectTime().toString() : LocalDateTime.now().toString());
+                mqUtil.send(MqConstant.CONTROL_TOPIC + ":face_match", controlMsg);
+
                 log.info("人脸匹配告警已发送：personId={}, similarity={}, videoStorageId={}",
                         record.getPersonId(), record.getSimilarity(),
                         videoClip != null ? videoClip.getStorageId() : null);

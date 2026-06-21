@@ -1,0 +1,48 @@
+server:
+  port: 8088
+  servlet:
+    context-path: /
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/police_vision?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password:
+      database: 0
+      timeout: 3000ms
+    neo4j:
+      uri: bolt://127.0.0.1:7687
+      username: neo4j
+      password: neo4j123
+      open-in-view: false
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.police.vision.control.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+rocketmq:
+  name-server: 127.0.0.1:9876
+  producer:
+    group: police-control-producer-group
+    send-message-timeout: 3000
+
+control:
+  fence:
+    enabled: true
+    check-interval: 5000
+  visitor:
+    enabled: true
+  aggregation:
+    area-size: 3
+    window-minutes: 10
+  personnel:
+      portrait-days: 30

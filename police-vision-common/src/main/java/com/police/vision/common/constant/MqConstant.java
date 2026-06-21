@@ -23,6 +23,20 @@ public class MqConstant {
     public static final String GIS_LOCATION_TOPIC = "police-gis-location-topic";
     public static final String GIS_LOCATION_GROUP = "police-gis-location-group";
 
+    public static final String CONTROL_TOPIC = "police-control-topic";
+    public static final String CONTROL_CONSUMER_GROUP = "police-control-consumer-group";
+
+    public static final String DISPATCH_TOPIC = "police-dispatch-topic";
+    public static final String TAG_AUTO_DISPATCH = "auto_dispatch";
+    public static final String TAG_MANUAL_DISPATCH = "manual_dispatch";
+    public static final String TAG_DISPATCH_RESULT = "dispatch_result";
+    public static final String TAG_DISPATCH_TIMEOUT = "dispatch_timeout";
+
+    public static final String TAG_FACE_MATCH = "face_match";
+    public static final String TAG_AGGREGATION_ALERT = "aggregation_alert";
+    public static final String TAG_FENCE_ALERT = "fence_alert";
+    public static final String TAG_VISITOR_PUSH = "visitor_push";
+
     public static final String TAG_DISPATCH = "dispatch";
     public static final String TAG_NOTIFY = "notify";
     public static final String TAG_ALARM = "alarm";
