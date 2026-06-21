@@ -23,6 +23,7 @@
         <module>police-vision-mobile</module>
         <module>police-vision-control</module>
         <module>police-vision-traffic</module>
+        <module>police-vision-event</module>
     </modules>
 
     <properties>
@@ -56,6 +57,9 @@
         <minio.version>8.5.10</minio.version>
         <arcsoft.version>3.0.0</arcsoft.version>
         <deepseek.version>1.0.0</deepseek.version>
+        <jasperreports.version>6.21.3</jasperreports.version>
+        <zxing.version>3.5.3</zxing.version>
+        <locationtech.version>1.1.0</locationtech.version>
 
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
     </properties>
@@ -184,6 +188,27 @@
                 <groupId>io.minio</groupId>
                 <artifactId>minio</artifactId>
                 <version>${minio.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>net.sf.jasperreports</groupId>
+                <artifactId>jasperreports</artifactId>
+                <version>${jasperreports.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.zxing</groupId>
+                <artifactId>core</artifactId>
+                <version>${zxing.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.zxing</groupId>
+                <artifactId>javase</artifactId>
+                <version>${zxing.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.locationtech.jts</groupId>
+                <artifactId>jts-core</artifactId>
+                <version>${locationtech.version}</version>
             </dependency>
 
             <dependency>

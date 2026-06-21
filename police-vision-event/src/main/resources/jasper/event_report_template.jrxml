@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+              name="EventSecurityReport" pageWidth="595" pageHeight="842" whenNoDataType="AllSectionsNoDetail"
+              columnWidth="555" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20"
+              uuid="event-security-report-001">
+
+    <property name="ireport.zoom" value="1.0"/>
+    <property name="ireport.x" value="0"/>
+    <property name="ireport.y" value="0"/>
+    <property name="net.sf.jasperreports.export.pdf.embedded.fonts.force" value="true"/>
+    <property name="net.sf.jasperreports.awt.ignore.missing.font" value="true"/>
+
+    <style name="TitleStyle" isDefault="false" fontSize="24" isBold="true" horizontalAlignment="Center" forecolor="#1a5490"/>
+    <style name="SubTitleStyle" isDefault="false" fontSize="16" isBold="true" horizontalAlignment="Center" forecolor="#333333"/>
+    <style name="SectionHeader" isDefault="false" fontSize="14" isBold="true" horizontalAlignment="Left" forecolor="#ffffff" backcolor="#1a5490"/>
+    <style name="NormalText" isDefault="false" fontSize="11" horizontalAlignment="Left"/>
+    <style name="NormalTextBold" isDefault="false" fontSize="11" isBold="true" horizontalAlignment="Left"/>
+    <style name="TableHeader" isDefault="false" fontSize="10" isBold="true" horizontalAlignment="Center" forecolor="#ffffff" backcolor="#4a7ab7"/>
+    <style name="TableDetail" isDefault="false" fontSize="10" horizontalAlignment="Center"/>
+
+    <parameter name="eventId" class="java.lang.Long"/>
+    <parameter name="eventName" class="java.lang.String"/>
+    <parameter name="eventType" class="java.lang.String"/>
+    <parameter name="eventLevel" class="java.lang.String"/>
+    <parameter name="startTime" class="java.lang.String"/>
+    <parameter name="endTime" class="java.lang.String"/>
+    <parameter name="organizer" class="java.lang.String"/>
+    <parameter name="description" class="java.lang.String"/>
+    <parameter name="generateTime" class="java.lang.String"/>
+    <parameter name="policeCount" class="java.lang.Integer"/>
+    <parameter name="cameraCount" class="java.lang.Integer"/>
+    <parameter name="postCount" class="java.lang.Integer"/>
+    <parameter name="alertCount" class="java.lang.Integer"/>
+    <parameter name="pedestrianCount" class="java.lang.Long"/>
+    <parameter name="vehicleCount" class="java.lang.Long"/>
+    <parameter name="summary" class="java.lang.String"/>
+
+    <title>
+        <band height="120" splitType="Stretch">
+            <rectangle>
+                <reportElement x="0" y="0" width="555" height="120" backcolor="#f5f8fc" uuid="title-bg"/>
+                <graphicElement>
+                    <pen lineWidth="0.0" fill="Solid"/>
+                </graphicElement>
+            </rectangle>
+            <staticText>
+                <reportElement style="TitleStyle" x="0" y="20" width="555" height="40" uuid="title-text"/>
+                <textElement markup="none"/>
+                <text><![CDATA[重大活动安保总结报告]]></text>
+            </staticText>
+            <staticText>
+                <reportElement style="SubTitleStyle" x="0" y="65" width="555" height="25" uuid="subtitle-text"/>
+                <textElement markup="none"/>
+                <text><![CDATA[Security Operation Summary Report]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="380" y="95" width="175" height="20" uuid="generate-time"/>
+                <textElement textAlignment="Right" fontSize="9" forecolor="#666666"/>
+                <textFieldExpression><![CDATA["报告生成时间: " + $P{generateTime}]]></textFieldExpression>
+            </textField>
+        </band>
+    </title>
+
+    <pageHeader>
+        <band height="0"/>
+    </pageHeader>
+
+    <detail>
+        <band height="580" splitType="Immediate">
+
+            <staticText>
+                <reportElement style="SectionHeader" x="0" y="0" width="555" height="25" uuid="sec1-header"/>
+                <text><![CDATA[  一、活动基本信息]]></text>
+            </staticText>
+
+            <textField>
+                <reportElement style="NormalTextBold" x="20" y="35" width="80" height="20" uuid="lbl-name"/>
+                <textFieldExpression><![CDATA["活动名称:"]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement style="NormalText" x="100" y="35" width="200" height="20" uuid="val-name"/>
+                <textFieldExpression><![CDATA[$P{eventName}]]></textFieldExpression>
+            </textField>
+
+            <textField>
+                <reportElement style="NormalTextBold" x="320" y="35" width="80" height="20" uuid="lbl-type"/>
+                <textFieldExpression><![CDATA["活动类型:"]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement style="NormalText" x="400" y="35" width="150" height="20" uuid="val-type"/>
+                <textFieldExpression><![CDATA[$P{eventType}]]></textFieldExpression>
+            </textField>
+
+            <textField>
+                <reportElement style="NormalTextBold" x="20" y="60" width="80" height="20" uuid="lbl-level"/>
+                <textFieldExpression><![CDATA["安保级别:"]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement style="NormalText" x="100" y="60" width="200" height="20" uuid="val-level"/>
+                <textFieldExpression><![CDATA[$P{eventLevel}]]></textFieldExpression>
+            </textField>
+
+            <textField>
+                <reportElement style="NormalTextBold" x="320" y="60" width="80" height="20" uuid="lbl-org"/>
+                <textFieldExpression><![CDATA["主办单位:"]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement style="NormalText" x="400" y="60" width="150" height="20" uuid="val-org"/>
+                <textFieldExpression><![CDATA[$P{organizer}]]></textFieldExpression>
+            </textField>
+
+            <textField>
+                <reportElement style="NormalTextBold" x="20" y="85" width="80" height="20" uuid="lbl-start"/>
+                <textFieldExpression><![CDATA["开始时间:"]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement style="NormalText" x="100" y="85" width="200" height="20" uuid="val-start"/>
+                <textFieldExpression><![CDATA[$P{startTime}]]></textFieldExpression>
+            </textField>
+
+            <textField>
+                <reportElement style="NormalTextBold" x="320" y="85" width="80" height="20" uuid="lbl-end"/>
+                <textFieldExpression><![CDATA["结束时间:"]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement style="NormalText" x="400" y="85" width="150" height="20" uuid="val-end"/>
+                <textFieldExpression><![CDATA[$P{endTime}]]></textFieldExpression>
+            </textField>
+
+            <textField>
+                <reportElement style="NormalTextBold" x="20" y="110" width="80" height="20" uuid="lbl-desc"/>
+                <textFieldExpression><![CDATA["活动描述:"]]></textFieldExpression>
+            </textField>
+            <textField isStretchWithOverflow="true">
+                <reportElement style="NormalText" x="100" y="110" width="435" height="35" uuid="val-desc"/>
+                <textElement textAlignment="Justified"/>
+                <textFieldExpression><![CDATA[$P{description}]]></textFieldExpression>
+            </textField>
+
+            <staticText>
+                <reportElement style="SectionHeader" x="0" y="155" width="555" height="25" uuid="sec2-header"/>
+                <text><![CDATA[  二、资源投入统计]]></text>
+            </staticText>
+
+            <rectangle>
+                <reportElement x="20" y="190" width="120" height="60" backcolor="#e8f0fe" uuid="box1"/>
+            </rectangle>
+            <staticText>
+                <reportElement x="20" y="195" width="120" height="20" style="NormalTextBold" horizontalAlignment="Center" uuid="lbl-police"/>
+                <text><![CDATA[投入警力]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="20" y="218" width="120" height="30" horizontalAlignment="Center" uuid="val-police"/>
+                <textElement fontSize="20" isBold="true" forecolor="#1a5490"/>
+                <textFieldExpression><![CDATA[$P{policeCount} + " 人"]]></textFieldExpression>
+            </textField>
+
+            <rectangle>
+                <reportElement x="160" y="190" width="120" height="60" backcolor="#e8f8f0" uuid="box2"/>
+            </rectangle>
+            <staticText>
+                <reportElement x="160" y="195" width="120" height="20" style="NormalTextBold" horizontalAlignment="Center" uuid="lbl-camera"/>
+                <text><![CDATA[监控摄像头]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="160" y="218" width="120" height="30" horizontalAlignment="Center" uuid="val-camera"/>
+                <textElement fontSize="20" isBold="true" forecolor="#1a7a3d"/>
+                <textFieldExpression><![CDATA[$P{cameraCount} + " 路"]]></textFieldExpression>
+            </textField>
+
+            <rectangle>
+                <reportElement x="300" y="190" width="120" height="60" backcolor="#fef6e8" uuid="box3"/>
+            </rectangle>
+            <staticText>
+                <reportElement x="300" y="195" width="120" height="20" style="NormalTextBold" horizontalAlignment="Center" uuid="lbl-post"/>
+                <text><![CDATA[执勤岗位]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="300" y="218" width="120" height="30" horizontalAlignment="Center" uuid="val-post"/>
+                <textElement fontSize="20" isBold="true" forecolor="#994a00"/>
+                <textFieldExpression><![CDATA[$P{postCount} + " 个"]]></textFieldExpression>
+            </textField>
+
+            <rectangle>
+                <reportElement x="440" y="190" width="115" height="60" backcolor="#fce8e8" uuid="box4"/>
+            </rectangle>
+            <staticText>
+                <reportElement x="440" y="195" width="115" height="20" style="NormalTextBold" horizontalAlignment="Center" uuid="lbl-alert"/>
+                <text><![CDATA[预警处置]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="440" y="218" width="115" height="30" horizontalAlignment="Center" uuid="val-alert"/>
+                <textElement fontSize="20" isBold="true" forecolor="#991a1a"/>
+                <textFieldExpression><![CDATA[$P{alertCount} + " 起"]]></textFieldExpression>
+            </textField>
+
+            <staticText>
+                <reportElement style="SectionHeader" x="0" y="265" width="555" height="25" uuid="sec3-header"/>
+                <text><![CDATA[  三、流量监测统计]]></text>
+            </staticText>
+
+            <rectangle>
+                <reportElement x="20" y="300" width="250" height="80" backcolor="#f0f5fc" uuid="box-ped"/>
+            </rectangle>
+            <staticText>
+                <reportElement x="20" y="310" width="250" height="25" style="NormalTextBold" horizontalAlignment="Center" uuid="lbl-ped"/>
+                <text><![CDATA[活动期间累计人流量]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="20" y="340" width="250" height="35" horizontalAlignment="Center" uuid="val-ped"/>
+                <textElement fontSize="26" isBold="true" forecolor="#1a5490"/>
+                <textFieldExpression><![CDATA[$P{pedestrianCount}]]></textFieldExpression>
+            </textField>
+
+            <rectangle>
+                <reportElement x="290" y="300" width="265" height="80" backcolor="#f0fcf0" uuid="box-veh"/>
+            </rectangle>
+            <staticText>
+                <reportElement x="290" y="310" width="265" height="25" style="NormalTextBold" horizontalAlignment="Center" uuid="lbl-veh"/>
+                <text><![CDATA[活动期间累计车流量]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="290" y="340" width="265" height="35" horizontalAlignment="Center" uuid="val-veh"/>
+                <textElement fontSize="26" isBold="true" forecolor="#1a7a3d"/>
+                <textFieldExpression><![CDATA[$P{vehicleCount}]]></textFieldExpression>
+            </textField>
+
+            <staticText>
+                <reportElement style="SectionHeader" x="0" y="400" width="555" height="25" uuid="sec4-header"/>
+                <text><![CDATA[  四、活动总结]]></text>
+            </staticText>
+
+            <textField isStretchWithOverflow="true">
+                <reportElement x="20" y="435" width="515" height="140" uuid="summary-val"/>
+                <textElement textAlignment="Justified" lineSpacing="1.5" fontSize="11"/>
+                <textFieldExpression><![CDATA[$P{summary}]]></textFieldExpression>
+            </textField>
+
+        </band>
+    </detail>
+
+    <pageFooter>
+        <band height="40" splitType="Stretch">
+            <line>
+                <reportElement x="0" y="5" width="555" height="1" forecolor="#cccccc" uuid="footer-line"/>
+            </line>
+            <textField>
+                <reportElement x="0" y="15" width="200" height="20" uuid="footer-left"/>
+                <textElement textAlignment="Left" fontSize="9" forecolor="#999999"/>
+                <textFieldExpression><![CDATA["公安视图智能综合实战指挥平台"]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="355" y="15" width="200" height="20" uuid="footer-right"/>
+                <textElement textAlignment="Right" fontSize="9" forecolor="#999999"/>
+                <textFieldExpression><![CDATA["第 " + $V{PAGE_NUMBER} + " 页 / 共 " + $V{PAGE_COUNT} + " 页"]]></textFieldExpression>
+            </textField>
+        </band>
+    </pageFooter>
+
+    <summary>
+        <band height="0"/>
+    </summary>
+
+</jasperReport>

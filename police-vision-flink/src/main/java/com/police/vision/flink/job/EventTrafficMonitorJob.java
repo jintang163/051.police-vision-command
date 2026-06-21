@@ -1,0 +1,308 @@
+package com.police.vision.flink.job;
+
+import com.alibaba.fastjson2.JSON;
+import com.police.vision.flink.config.FlinkConfig;
+import com.police.vision.flink.entity.EventTrafficCapture;
+import com.police.vision.flink.schema.EventTrafficCaptureSchema;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.rocketmq.source.RocketMQSource;
+import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.rocketmq.client.producer.DefaultMQProducer;
+import org.apache.rocketmq.common.message.Message;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.stereotype.Component;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPoolConfig;
+
+import java.io.Serializable;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class EventTrafficMonitorJob implements CommandLineRunner {
+
+    private final FlinkConfig flinkConfig;
+
+    public static final String EVENT_TRAFFIC_DATA_TOPIC = "EVENT_TRAFFIC_DATA";
+    public static final String EVENT_TRAFFIC_ALERT_TOPIC = "EVENT_TRAFFIC_ALERT";
+
+    public static void main(String[] args) throws Exception {
+        if (args.length < 4) {
+            System.err.println("Usage: EventTrafficMonitorJob <eventId> <pedestrianThreshold> <vehicleThreshold> <windowSeconds>");
+            System.exit(1);
+        }
+
+        Long eventId = Long.parseLong(args[0]);
+        Long pedestrianThreshold = Long.parseLong(args[1]);
+        Long vehicleThreshold = Long.parseLong(args[2]);
+        int windowSeconds = Integer.parseInt(args[3]);
+
+        runJob(eventId, pedestrianThreshold, vehicleThreshold, windowSeconds);
+    }
+
+    public static void runJob(Long eventId, Long pedestrianThreshold, Long vehicleThreshold, int windowSeconds) throws Exception {
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(60000);
+
+        String nameServer = System.getProperty("rocketmq.nameserver", "127.0.0.1:9876");
+        String redisHost = System.getProperty("redis.host", "127.0.0.1");
+        int redisPort = Integer.parseInt(System.getProperty("redis.port", "6379"));
+        String redisPassword = System.getProperty("redis.password", "");
+
+        RocketMQSource<EventTrafficCapture> source = RocketMQSource.<EventTrafficCapture>builder()
+                .setTopicName(EVENT_TRAFFIC_DATA_TOPIC)
+                .setConsumerGroup("flink-event-traffic-monitor-group-" + eventId)
+                .setNameServerAddress(nameServer)
+                .setStartMessageOffset(RocketMQSourceOptions.START_LATEST)
+                .setDeserializationSchema(new EventTrafficCaptureSchema())
+                .build();
+
+        DataStream<EventTrafficCapture> trafficStream = env
+                .fromSource(source, WatermarkStrategy
+                        .<EventTrafficCapture>forBoundedOutOfOrderness(Duration.ofSeconds(5))
+                        .withTimestampAssigner((event, ts) -> event.getCaptureTime() != null ? event.getCaptureTime() : System.currentTimeMillis()),
+                        "EventTrafficCaptureSource"
+                )
+                .name("EventTrafficCaptureSource")
+                .filter(e -> e.getType() != null && e.getCount() != null)
+                .name("FilterValidTraffic");
+
+        SingleOutputStreamOperator<TrafficAlertResult> alertStream = trafficStream
+                .keyBy(EventTrafficCapture::getType)
+                .window(TumblingProcessingTimeWindows.of(Time.seconds(windowSeconds)))
+                .sum("count")
+                .keyBy(EventTrafficCapture::getType)
+                .process(new TrafficAlertProcessWindowFunction(eventId, pedestrianThreshold, vehicleThreshold))
+                .name("TrafficAlertDetection");
+
+        alertStream.addSink(new TrafficAlertRocketMQSink(nameServer, EVENT_TRAFFIC_ALERT_TOPIC))
+                .name("TrafficAlertRocketMQSink");
+
+        alertStream.addSink(new TrafficCountRedisSink(redisHost, redisPort, redisPassword, eventId))
+                .name("TrafficCountRedisSink");
+
+        alertStream.print("EventTrafficAlert");
+
+        env.executeAsync("EventTrafficMonitor-Job-" + eventId);
+        log.info("活动交通监控Flink任务已启动：eventId={}, 行人阈值={}, 车辆阈值={}, 窗口={}秒",
+                eventId, pedestrianThreshold, vehicleThreshold, windowSeconds);
+    }
+
+    @Override
+    public void run(String... args) {
+        try {
+            Thread thread = new Thread(() -> {
+                try {
+                    Thread.sleep(15000L);
+                    log.info("活动交通监控任务等待手动启动，通过main方法或API触发具体eventId的任务");
+                } catch (Exception e) {
+                    log.error("活动交通监控任务线程异常：{}", e.getMessage(), e);
+                }
+            });
+            thread.setDaemon(true);
+            thread.setName("Flink-Event-Traffic-Monitor");
+            thread.start();
+        } catch (Exception e) {
+            log.warn("活动交通监控任务启动线程创建失败：{}", e.getMessage());
+        }
+    }
+
+    public static class TrafficAlertProcessWindowFunction
+            extends ProcessWindowFunction<EventTrafficCapture, TrafficAlertResult, String, TimeWindow> {
+
+        private final Long eventId;
+        private final Long pedestrianThreshold;
+        private final Long vehicleThreshold;
+
+        public TrafficAlertProcessWindowFunction(Long eventId, Long pedestrianThreshold, Long vehicleThreshold) {
+            this.eventId = eventId;
+            this.pedestrianThreshold = pedestrianThreshold;
+            this.vehicleThreshold = vehicleThreshold;
+        }
+
+        @Override
+        public void process(String type, Context context, Iterable<EventTrafficCapture> elements, Collector<TrafficAlertResult> out) {
+            long totalCount = 0;
+            Double firstLng = null;
+            Double firstLat = null;
+
+            for (EventTrafficCapture capture : elements) {
+                totalCount += capture.getCount() != null ? capture.getCount() : 0L;
+                if (firstLng == null && capture.getLng() != null) {
+                    firstLng = capture.getLng();
+                }
+                if (firstLat == null && capture.getLat() != null) {
+                    firstLat = capture.getLat();
+                }
+            }
+
+            Long threshold = "pedestrian".equals(type) ? pedestrianThreshold : vehicleThreshold;
+            if (threshold == null || threshold <= 0) {
+                return;
+            }
+
+            if (totalCount > threshold) {
+                double exceedRatio = (double) (totalCount - threshold) / threshold;
+                int alertLevel;
+                if (exceedRatio >= 0.5) {
+                    alertLevel = 3;
+                } else if (exceedRatio >= 0.3) {
+                    alertLevel = 2;
+                } else if (exceedRatio >= 0.1) {
+                    alertLevel = 1;
+                } else {
+                    return;
+                }
+
+                TrafficAlertResult alert = new TrafficAlertResult();
+                alert.setEventId(eventId);
+                alert.setAlertType(type);
+                alert.setAlertLevel(alertLevel);
+                alert.setCountValue(totalCount);
+                alert.setThresholdValue(threshold);
+                alert.setLng(firstLng);
+                alert.setLat(firstLat);
+                alert.setAlertTime(System.currentTimeMillis());
+
+                log.warn("【交通预警】触发预警：type={}, count={}, threshold={}, level={}, eventId={}",
+                        type, totalCount, threshold, alertLevel, eventId);
+                out.collect(alert);
+            }
+        }
+    }
+
+    @lombok.Data
+    public static class TrafficAlertResult implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private Long eventId;
+        private String alertType;
+        private Integer alertLevel;
+        private Long countValue;
+        private Long thresholdValue;
+        private Double lng;
+        private Double lat;
+        private Long alertTime;
+    }
+
+    public static class TrafficAlertRocketMQSink extends RichSinkFunction<TrafficAlertResult> {
+
+        private final String nameServer;
+        private final String topic;
+        private transient DefaultMQProducer producer;
+
+        public TrafficAlertRocketMQSink(String nameServer, String topic) {
+            this.nameServer = nameServer;
+            this.topic = topic;
+        }
+
+        @Override
+        public void open(Configuration parameters) {
+            try {
+                producer = new DefaultMQProducer("flink-traffic-alert-sink-group");
+                producer.setNamesrvAddr(nameServer);
+                producer.start();
+            } catch (Exception e) {
+                log.error("RocketMQ Producer启动失败：{}", e.getMessage());
+            }
+        }
+
+        @Override
+        public void invoke(TrafficAlertResult value, Context context) {
+            try {
+                if (producer == null) return;
+                Map<String, Object> msg = new HashMap<>();
+                msg.put("type", "traffic_alert");
+                msg.put("data", value);
+                msg.put("timestamp", System.currentTimeMillis());
+                String json = JSON.toJSONString(msg);
+
+                Message mqMsg = new Message(
+                        topic,
+                        value.getAlertType(),
+                        json.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+                );
+                producer.sendOneway(mqMsg);
+            } catch (Exception e) {
+                log.error("交通预警发送MQ失败：{}", e.getMessage());
+            }
+        }
+
+        @Override
+        public void close() {
+            if (producer != null) producer.shutdown();
+        }
+    }
+
+    public static class TrafficCountRedisSink extends RichSinkFunction<TrafficAlertResult> {
+
+        private final String redisHost;
+        private final int redisPort;
+        private final String redisPassword;
+        private final Long eventId;
+        private transient JedisPool jedisPool;
+
+        public TrafficCountRedisSink(String redisHost, int redisPort, String redisPassword, Long eventId) {
+            this.redisHost = redisHost;
+            this.redisPort = redisPort;
+            this.redisPassword = redisPassword;
+            this.eventId = eventId;
+        }
+
+        @Override
+        public void open(Configuration parameters) throws Exception {
+            JedisPoolConfig poolConfig = new JedisPoolConfig();
+            poolConfig.setMaxTotal(10);
+            poolConfig.setMaxIdle(5);
+            poolConfig.setMinIdle(2);
+            poolConfig.setMaxWait(3000);
+
+            if (redisPassword != null && !redisPassword.isEmpty()) {
+                jedisPool = new JedisPool(poolConfig, redisHost, redisPort, 3000, redisPassword);
+            } else {
+                jedisPool = new JedisPool(poolConfig, redisHost, redisPort, 3000);
+            }
+        }
+
+        @Override
+        public void invoke(TrafficAlertResult value, Context context) throws Exception {
+            try (Jedis jedis = jedisPool.getResource()) {
+                String type = value.getAlertType();
+                Long count = value.getCountValue();
+                if ("pedestrian".equals(type)) {
+                    String key = "event:" + eventId + ":pedestrian:total";
+                    jedis.incrBy(key, count != null ? count : 0L);
+                } else if ("vehicle".equals(type)) {
+                    String key = "event:" + eventId + ":vehicle:total";
+                    jedis.incrBy(key, count != null ? count : 0L);
+                }
+                log.debug("写入Redis交通统计成功：eventId={}, type={}, count={}", eventId, type, count);
+            } catch (Exception e) {
+                log.error("写入Redis交通统计失败：{}", e.getMessage(), e);
+            }
+        }
+
+        @Override
+        public void close() throws Exception {
+            if (jedisPool != null) {
+                jedisPool.close();
+            }
+        }
+    }
+}
