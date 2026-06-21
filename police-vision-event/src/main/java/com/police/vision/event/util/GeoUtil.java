@@ -96,4 +96,71 @@ public class GeoUtil {
         }
         return JSON.toJSONString(points);
     }
+
+    public static List<double[]> interpolatePoints(List<double[]> points, double intervalMeters) {
+        List<double[]> result = new ArrayList<>();
+        if (points == null || points.size() < 2) {
+            return result;
+        }
+
+        double accumulatedDistance = 0;
+        result.add(points.get(0));
+
+        for (int i = 0; i < points.size() - 1; i++) {
+            double[] p1 = points.get(i);
+            double[] p2 = points.get(i + 1);
+            double segmentDistance = haversineDistance(p1[0], p1[1], p2[0], p2[1]);
+
+            while (accumulatedDistance + intervalMeters <= segmentDistance) {
+                double ratio = (accumulatedDistance + intervalMeters) / segmentDistance;
+                double lng = p1[0] + ratio * (p2[0] - p1[0]);
+                double lat = p1[1] + ratio * (p2[1] - p1[1]);
+                result.add(new double[]{lng, lat});
+                accumulatedDistance += intervalMeters;
+            }
+
+            accumulatedDistance -= segmentDistance;
+        }
+
+        if (result.get(result.size() - 1)[0] != points.get(points.size() - 1)[0]
+                || result.get(result.size() - 1)[1] != points.get(points.size() - 1)[1]) {
+            result.add(points.get(points.size() - 1));
+        }
+
+        return result;
+    }
+
+    public static double pointToLineDistance(double px, double py, double x1, double y1, double x2, double y2) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+
+        if (dx == 0 && dy == 0) {
+            return haversineDistance(px, py, x1, y1);
+        }
+
+        double t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
+        t = Math.max(0, Math.min(1, t));
+
+        double nearestX = x1 + t * dx;
+        double nearestY = y1 + t * dy;
+
+        return haversineDistance(px, py, nearestX, nearestY);
+    }
+
+    public static double pointToPolylineDistance(double px, double py, List<double[]> polyline) {
+        if (polyline == null || polyline.size() < 2) {
+            return Double.MAX_VALUE;
+        }
+
+        double minDistance = Double.MAX_VALUE;
+        for (int i = 0; i < polyline.size() - 1; i++) {
+            double[] p1 = polyline.get(i);
+            double[] p2 = polyline.get(i + 1);
+            double distance = pointToLineDistance(px, py, p1[0], p1[1], p2[0], p2[1]);
+            if (distance < minDistance) {
+                minDistance = distance;
+            }
+        }
+        return minDistance;
+    }
 }

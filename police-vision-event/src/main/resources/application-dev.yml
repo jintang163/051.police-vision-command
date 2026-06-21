@@ -60,3 +60,12 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+
+event:
+  traffic:
+    simulator-enabled: false
+    simulator-event-id: 1
+    simulator-camera-count: 5
+    simulator-base-pedestrian: 50
+    simulator-base-vehicle: 30
+    simulator-fluctuation: 0.3

@@ -24,4 +24,10 @@ public class EventNacosConfig {
 
     @Value("${event.report.output-path:/data/reports/}")
     private String reportOutputPath;
+
+    @Value("${event.resources.default-radius:1000}")
+    private Double defaultResourceRadius;
+
+    @Value("${event.gis.service-name:police-vision-gis}")
+    private String gisServiceName;
 }

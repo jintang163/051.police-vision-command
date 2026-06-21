@@ -30,10 +30,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -42,12 +40,13 @@ public class PassService {
 
     private final SecPassMapper secPassMapper;
 
-    private static final String PASS_JWT_SECRET = "police-vision-pass-secret-key-2024-security-pass-token";
+    private static final String PASS_JWT_SECRET = "police-vision-pass-secret-key-2024-security-event-token-abcdef";
     private static final SecretKey PASS_SECRET_KEY = Keys.hmacShaKeyFor(PASS_JWT_SECRET.getBytes(StandardCharsets.UTF_8));
     private static final int PASS_STATUS_VALID = 1;
     private static final int PASS_STATUS_REVOKED = 2;
     private static final int DEFAULT_VALID_DAYS = 7;
     private static final int QR_CODE_SIZE = 300;
+    private static final DateTimeFormatter PASS_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     @Transactional(rollbackFor = Exception.class)
     public Result<Map<String, Object>> generatePass(PassCreateDTO dto) {
@@ -55,12 +54,14 @@ public class PassService {
         try {
             int validDays = dto.getValidDays() != null ? dto.getValidDays() : DEFAULT_VALID_DAYS;
 
+            Long passId = SnowflakeIdUtil.nextId();
             String passNo = generatePassNo();
 
             LocalDateTime issueTime = LocalDateTime.now();
             LocalDateTime expireTime = issueTime.plusDays(validDays);
 
             String jwtToken = generatePassJwtToken(
+                    passId,
                     passNo,
                     dto.getHolderName(),
                     dto.getHolderIdcard(),
@@ -74,7 +75,7 @@ public class PassService {
 
             SecPass secPass = new SecPass();
             BeanUtils.copyProperties(dto, secPass);
-            secPass.setId(SnowflakeIdUtil.nextId());
+            secPass.setId(passId);
             secPass.setPassNo(passNo);
             secPass.setJwtToken(jwtToken);
             secPass.setQrCode(qrCodeBase64);
@@ -85,12 +86,13 @@ public class PassService {
             secPassMapper.insert(secPass);
 
             Map<String, Object> result = new HashMap<>();
-            result.put("passId", secPass.getId());
+            result.put("passId", passId);
             result.put("passNo", passNo);
             result.put("jwtToken", jwtToken);
             result.put("qrCodeBase64", qrCodeBase64);
+            result.put("expireTime", expireTime);
 
-            log.info("生成电子通行证成功，passId：{}，passNo：{}", secPass.getId(), passNo);
+            log.info("生成电子通行证成功，passId：{}，passNo：{}", passId, passNo);
             return Result.success(result);
         } catch (BusinessException e) {
             throw e;
@@ -110,16 +112,17 @@ public class PassService {
 
             Claims claims = parsePassJwtToken(dto.getJwtToken());
             if (claims == null) {
-                return Result.success(buildVerifyResult(null, false, "JWT令牌无效或已过期", null));
+                return Result.success(buildVerifyResult(null, false, "JWT令牌无效或已过期", 0L, 0));
             }
 
-            String passNo = claims.get("passNo", String.class);
-            LambdaQueryWrapper<SecPass> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(SecPass::getPassNo, passNo);
-            SecPass secPass = secPassMapper.selectOne(wrapper);
+            Long passId = claims.get("passId", Long.class);
+            if (passId == null) {
+                return Result.success(buildVerifyResult(null, false, "JWT令牌无效", 0L, 0));
+            }
 
+            SecPass secPass = secPassMapper.selectById(passId);
             if (secPass == null) {
-                return Result.success(buildVerifyResult(null, false, "通行证不存在", null));
+                return Result.success(buildVerifyResult(null, false, "通行证不存在", 0L, 0));
             }
 
             return doVerifyPass(secPass);
@@ -139,12 +142,34 @@ public class PassService {
                 throw new BusinessException(ResultCode.PARAM_ERROR, "二维码内容不能为空");
             }
 
-            LambdaQueryWrapper<SecPass> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(SecPass::getQrCode, qrCode);
-            SecPass secPass = secPassMapper.selectOne(wrapper);
+            SecPass secPass = null;
+
+            try {
+                Claims claims = parsePassJwtToken(qrCode);
+                if (claims != null) {
+                    Long passId = claims.get("passId", Long.class);
+                    if (passId != null) {
+                        secPass = secPassMapper.selectById(passId);
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("二维码内容不是JWT令牌，尝试按passNo查询");
+            }
 
             if (secPass == null) {
-                return Result.success(buildVerifyResult(null, false, "通行证不存在", null));
+                LambdaQueryWrapper<SecPass> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(SecPass::getPassNo, qrCode);
+                secPass = secPassMapper.selectOne(wrapper);
+            }
+
+            if (secPass == null) {
+                LambdaQueryWrapper<SecPass> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(SecPass::getQrCode, qrCode);
+                secPass = secPassMapper.selectOne(wrapper);
+            }
+
+            if (secPass == null) {
+                return Result.success(buildVerifyResult(null, false, "通行证不存在", 0L, 0));
             }
 
             return doVerifyPass(secPass);
@@ -220,17 +245,67 @@ public class PassService {
         }
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    public Result<List<Map<String, Object>>> batchGeneratePass(List<PassCreateDTO> dtoList) {
+        log.info("批量生成电子通行证开始，数量：{}", dtoList != null ? dtoList.size() : 0);
+        try {
+            if (dtoList == null || dtoList.isEmpty()) {
+                throw new BusinessException(ResultCode.PARAM_ERROR, "通行证列表不能为空");
+            }
+
+            List<Map<String, Object>> resultList = new ArrayList<>();
+            for (PassCreateDTO dto : dtoList) {
+                Result<Map<String, Object>> result = generatePass(dto);
+                if (result != null && result.getData() != null) {
+                    resultList.add(result.getData());
+                }
+            }
+
+            log.info("批量生成电子通行证成功，数量：{}", resultList.size());
+            return Result.success(resultList);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("批量生成电子通行证失败", e);
+            throw new BusinessException(ResultCode.DATABASE_ERROR, "批量生成电子通行证失败：" + e.getMessage());
+        }
+    }
+
+    public Result<byte[]> downloadQrCode(Long passId) {
+        log.info("下载通行证二维码开始，passId：{}", passId);
+        try {
+            SecPass secPass = secPassMapper.selectById(passId);
+            if (secPass == null) {
+                throw new BusinessException(ResultCode.DATA_NOT_FOUND, "通行证不存在");
+            }
+
+            String qrCodeBase64 = secPass.getQrCode();
+            if (!StringUtils.hasText(qrCodeBase64)) {
+                throw new BusinessException(ResultCode.FAIL, "二维码图片不存在");
+            }
+
+            byte[] qrCodeBytes = Base64.getDecoder().decode(qrCodeBase64);
+            return Result.success(qrCodeBytes);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("下载通行证二维码失败，passId：{}", passId, e);
+            throw new BusinessException(ResultCode.FAIL, "下载通行证二维码失败：" + e.getMessage());
+        }
+    }
+
     private String generatePassNo() {
-        String timestamp = String.valueOf(System.currentTimeMillis());
+        String timestamp = LocalDateTime.now().format(PASS_NO_FORMATTER);
         Random random = new Random();
         int randomNum = random.nextInt(1000000);
         return "PASS" + timestamp + String.format("%06d", randomNum);
     }
 
-    private String generatePassJwtToken(String passNo, String holderName, String holderIdcard,
+    private String generatePassJwtToken(Long passId, String passNo, String holderName, String holderIdcard,
                                         Long eventId, String passType,
                                         LocalDateTime issueTime, LocalDateTime expireTime) {
         Map<String, Object> claims = new HashMap<>();
+        claims.put("passId", passId);
         claims.put("passNo", passNo);
         claims.put("holderName", holderName);
         claims.put("holderIdcard", holderIdcard);
@@ -268,7 +343,7 @@ public class PassService {
         LocalDateTime now = LocalDateTime.now();
         boolean isValid = true;
         String message = "验证通过";
-        long remainingMinutes = 0;
+        long remainingSeconds = 0;
 
         if (PASS_STATUS_VALID != secPass.getStatus()) {
             isValid = false;
@@ -278,20 +353,22 @@ public class PassService {
             message = "通行证已过期";
         } else {
             Duration duration = Duration.between(now, secPass.getExpireTime());
-            remainingMinutes = duration.toMinutes();
+            remainingSeconds = duration.getSeconds();
         }
 
+        int verifyCount = secPass.getVerifyCount() == null ? 0 : secPass.getVerifyCount();
         if (isValid) {
-            secPass.setVerifyCount(secPass.getVerifyCount() == null ? 1 : secPass.getVerifyCount() + 1);
+            secPass.setVerifyCount(verifyCount + 1);
             secPassMapper.updateById(secPass);
+            verifyCount = verifyCount + 1;
         }
 
-        Map<String, Object> verifyResult = buildVerifyResult(secPass, isValid, message, remainingMinutes);
+        Map<String, Object> verifyResult = buildVerifyResult(secPass, isValid, message, remainingSeconds, verifyCount);
         return Result.success(verifyResult);
     }
 
     private Map<String, Object> buildVerifyResult(SecPass secPass, boolean isValid,
-                                                   String message, Long remainingMinutes) {
+                                                   String message, Long remainingSeconds, int verifyCount) {
         Map<String, Object> result = new HashMap<>();
         result.put("valid", isValid);
         result.put("message", message);
@@ -305,22 +382,10 @@ public class PassService {
             result.put("passType", secPass.getPassType());
             result.put("eventId", secPass.getEventId());
             result.put("status", secPass.getStatus());
-            result.put("verifyCount", secPass.getVerifyCount());
+            result.put("verifyCount", verifyCount);
             result.put("issueTime", secPass.getIssueTime());
             result.put("expireTime", secPass.getExpireTime());
-
-            if (remainingMinutes != null && remainingMinutes > 0) {
-                long days = remainingMinutes / (24 * 60);
-                long hours = (remainingMinutes % (24 * 60)) / 60;
-                long minutes = remainingMinutes % 60;
-                result.put("remainingDays", days);
-                result.put("remainingHours", hours);
-                result.put("remainingMinutes", minutes);
-            } else {
-                result.put("remainingDays", 0);
-                result.put("remainingHours", 0);
-                result.put("remainingMinutes", 0);
-            }
+            result.put("remainingSeconds", remainingSeconds != null ? remainingSeconds : 0L);
         }
         return result;
     }

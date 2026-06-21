@@ -1,12 +1,14 @@
 package com.police.vision.flink.job;
 
 import com.alibaba.fastjson2.JSON;
+import com.police.vision.common.constant.MqConstant;
 import com.police.vision.flink.config.FlinkConfig;
 import com.police.vision.flink.entity.EventTrafficCapture;
 import com.police.vision.flink.schema.EventTrafficCaptureSchema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.source.RocketMQSource;
@@ -40,9 +42,6 @@ public class EventTrafficMonitorJob implements CommandLineRunner {
 
     private final FlinkConfig flinkConfig;
 
-    public static final String EVENT_TRAFFIC_DATA_TOPIC = "EVENT_TRAFFIC_DATA";
-    public static final String EVENT_TRAFFIC_ALERT_TOPIC = "EVENT_TRAFFIC_ALERT";
-
     public static void main(String[] args) throws Exception {
         if (args.length < 4) {
             System.err.println("Usage: EventTrafficMonitorJob <eventId> <pedestrianThreshold> <vehicleThreshold> <windowSeconds>");
@@ -67,7 +66,7 @@ public class EventTrafficMonitorJob implements CommandLineRunner {
         String redisPassword = System.getProperty("redis.password", "");
 
         RocketMQSource<EventTrafficCapture> source = RocketMQSource.<EventTrafficCapture>builder()
-                .setTopicName(EVENT_TRAFFIC_DATA_TOPIC)
+                .setTopicName(MqConstant.EVENT_TRAFFIC_DATA_TOPIC)
                 .setConsumerGroup("flink-event-traffic-monitor-group-" + eventId)
                 .setNameServerAddress(nameServer)
                 .setStartMessageOffset(RocketMQSourceOptions.START_LATEST)
@@ -76,26 +75,24 @@ public class EventTrafficMonitorJob implements CommandLineRunner {
 
         DataStream<EventTrafficCapture> trafficStream = env
                 .fromSource(source, WatermarkStrategy
-                        .<EventTrafficCapture>forBoundedOutOfOrderness(Duration.ofSeconds(5))
-                        .withTimestampAssigner((event, ts) -> event.getCaptureTime() != null ? event.getCaptureTime() : System.currentTimeMillis()),
+                                .<EventTrafficCapture>forBoundedOutOfOrderness(Duration.ofSeconds(5))
+                                .withTimestampAssigner((event, ts) -> event.getCaptureTime() != null ? event.getCaptureTime() : System.currentTimeMillis()),
                         "EventTrafficCaptureSource"
                 )
                 .name("EventTrafficCaptureSource")
-                .filter(e -> e.getType() != null && e.getCount() != null)
+                .filter(e -> e.getType() != null && e.getCount() != null && e.getEventId() != null)
                 .name("FilterValidTraffic");
 
         SingleOutputStreamOperator<TrafficAlertResult> alertStream = trafficStream
-                .keyBy(EventTrafficCapture::getType)
+                .keyBy(capture -> capture.getEventId() + "_" + capture.getType())
                 .window(TumblingProcessingTimeWindows.of(Time.seconds(windowSeconds)))
-                .sum("count")
-                .keyBy(EventTrafficCapture::getType)
-                .process(new TrafficAlertProcessWindowFunction(eventId, pedestrianThreshold, vehicleThreshold))
+                .aggregate(new TrafficCountAggregate(), new TrafficAlertProcessWindowFunction(pedestrianThreshold, vehicleThreshold))
                 .name("TrafficAlertDetection");
 
-        alertStream.addSink(new TrafficAlertRocketMQSink(nameServer, EVENT_TRAFFIC_ALERT_TOPIC))
+        alertStream.addSink(new TrafficAlertRocketMQSink(nameServer, MqConstant.EVENT_TRAFFIC_ALERT_TOPIC))
                 .name("TrafficAlertRocketMQSink");
 
-        alertStream.addSink(new TrafficCountRedisSink(redisHost, redisPort, redisPassword, eventId))
+        alertStream.addSink(new TrafficCountRedisSink(redisHost, redisPort, redisPassword))
                 .name("TrafficCountRedisSink");
 
         alertStream.print("EventTrafficAlert");
@@ -124,66 +121,104 @@ public class EventTrafficMonitorJob implements CommandLineRunner {
         }
     }
 
-    public static class TrafficAlertProcessWindowFunction
-            extends ProcessWindowFunction<EventTrafficCapture, TrafficAlertResult, String, TimeWindow> {
+    public static class TrafficCountAggregate implements AggregateFunction<EventTrafficCapture, TrafficAccumulator, TrafficAccumulator> {
 
-        private final Long eventId;
+        @Override
+        public TrafficAccumulator createAccumulator() {
+            return new TrafficAccumulator();
+        }
+
+        @Override
+        public TrafficAccumulator add(EventTrafficCapture value, TrafficAccumulator accumulator) {
+            accumulator.setEventId(value.getEventId());
+            accumulator.setType(value.getType());
+            accumulator.setCount(accumulator.getCount() + (value.getCount() != null ? value.getCount() : 0L));
+            if (accumulator.getLng() == null && value.getLng() != null) {
+                accumulator.setLng(value.getLng());
+            }
+            if (accumulator.getLat() == null && value.getLat() != null) {
+                accumulator.setLat(value.getLat());
+            }
+            return accumulator;
+        }
+
+        @Override
+        public TrafficAccumulator getResult(TrafficAccumulator accumulator) {
+            return accumulator;
+        }
+
+        @Override
+        public TrafficAccumulator merge(TrafficAccumulator a, TrafficAccumulator b) {
+            TrafficAccumulator merged = new TrafficAccumulator();
+            merged.setEventId(a.getEventId() != null ? a.getEventId() : b.getEventId());
+            merged.setType(a.getType() != null ? a.getType() : b.getType());
+            merged.setCount(a.getCount() + b.getCount());
+            merged.setLng(a.getLng() != null ? a.getLng() : b.getLng());
+            merged.setLat(a.getLat() != null ? a.getLat() : b.getLat());
+            return merged;
+        }
+    }
+
+    @lombok.Data
+    public static class TrafficAccumulator implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private Long eventId;
+        private String type;
+        private Long count = 0L;
+        private Double lng;
+        private Double lat;
+    }
+
+    public static class TrafficAlertProcessWindowFunction
+            extends ProcessWindowFunction<TrafficAccumulator, TrafficAlertResult, String, TimeWindow> {
+
         private final Long pedestrianThreshold;
         private final Long vehicleThreshold;
 
-        public TrafficAlertProcessWindowFunction(Long eventId, Long pedestrianThreshold, Long vehicleThreshold) {
-            this.eventId = eventId;
+        public TrafficAlertProcessWindowFunction(Long pedestrianThreshold, Long vehicleThreshold) {
             this.pedestrianThreshold = pedestrianThreshold;
             this.vehicleThreshold = vehicleThreshold;
         }
 
         @Override
-        public void process(String type, Context context, Iterable<EventTrafficCapture> elements, Collector<TrafficAlertResult> out) {
-            long totalCount = 0;
-            Double firstLng = null;
-            Double firstLat = null;
+        public void process(String key, Context context, Iterable<TrafficAccumulator> elements, Collector<TrafficAlertResult> out) {
+            for (TrafficAccumulator acc : elements) {
+                String type = acc.getType();
+                Long totalCount = acc.getCount();
+                Long eventId = acc.getEventId();
 
-            for (EventTrafficCapture capture : elements) {
-                totalCount += capture.getCount() != null ? capture.getCount() : 0L;
-                if (firstLng == null && capture.getLng() != null) {
-                    firstLng = capture.getLng();
-                }
-                if (firstLat == null && capture.getLat() != null) {
-                    firstLat = capture.getLat();
-                }
-            }
-
-            Long threshold = "pedestrian".equals(type) ? pedestrianThreshold : vehicleThreshold;
-            if (threshold == null || threshold <= 0) {
-                return;
-            }
-
-            if (totalCount > threshold) {
-                double exceedRatio = (double) (totalCount - threshold) / threshold;
-                int alertLevel;
-                if (exceedRatio >= 0.5) {
-                    alertLevel = 3;
-                } else if (exceedRatio >= 0.3) {
-                    alertLevel = 2;
-                } else if (exceedRatio >= 0.1) {
-                    alertLevel = 1;
-                } else {
-                    return;
+                Long threshold = "pedestrian".equals(type) ? pedestrianThreshold : vehicleThreshold;
+                if (threshold == null || threshold <= 0) {
+                    continue;
                 }
 
-                TrafficAlertResult alert = new TrafficAlertResult();
-                alert.setEventId(eventId);
-                alert.setAlertType(type);
-                alert.setAlertLevel(alertLevel);
-                alert.setCountValue(totalCount);
-                alert.setThresholdValue(threshold);
-                alert.setLng(firstLng);
-                alert.setLat(firstLat);
-                alert.setAlertTime(System.currentTimeMillis());
+                if (totalCount > threshold) {
+                    double exceedRatio = (double) (totalCount - threshold) / threshold;
+                    int alertLevel;
+                    if (exceedRatio >= 0.5) {
+                        alertLevel = 3;
+                    } else if (exceedRatio >= 0.3) {
+                        alertLevel = 2;
+                    } else if (exceedRatio >= 0.1) {
+                        alertLevel = 1;
+                    } else {
+                        continue;
+                    }
 
-                log.warn("【交通预警】触发预警：type={}, count={}, threshold={}, level={}, eventId={}",
-                        type, totalCount, threshold, alertLevel, eventId);
-                out.collect(alert);
+                    TrafficAlertResult alert = new TrafficAlertResult();
+                    alert.setEventId(eventId);
+                    alert.setAlertType(type);
+                    alert.setAlertLevel(alertLevel);
+                    alert.setCountValue(totalCount);
+                    alert.setThresholdValue(threshold);
+                    alert.setLng(acc.getLng());
+                    alert.setLat(acc.getLat());
+                    alert.setAlertTime(System.currentTimeMillis());
+
+                    log.warn("【交通预警】触发预警：type={}, count={}, threshold={}, level={}, eventId={}",
+                            type, totalCount, threshold, alertLevel, eventId);
+                    out.collect(alert);
+                }
             }
         }
     }
@@ -228,14 +263,14 @@ public class EventTrafficMonitorJob implements CommandLineRunner {
             try {
                 if (producer == null) return;
                 Map<String, Object> msg = new HashMap<>();
-                msg.put("type", "traffic_alert");
+                msg.put("type", MqConstant.TAG_EVENT_TRAFFIC_ALERT);
                 msg.put("data", value);
                 msg.put("timestamp", System.currentTimeMillis());
                 String json = JSON.toJSONString(msg);
 
                 Message mqMsg = new Message(
                         topic,
-                        value.getAlertType(),
+                        MqConstant.TAG_EVENT_TRAFFIC_ALERT,
                         json.getBytes(java.nio.charset.StandardCharsets.UTF_8)
                 );
                 producer.sendOneway(mqMsg);
@@ -255,14 +290,12 @@ public class EventTrafficMonitorJob implements CommandLineRunner {
         private final String redisHost;
         private final int redisPort;
         private final String redisPassword;
-        private final Long eventId;
         private transient JedisPool jedisPool;
 
-        public TrafficCountRedisSink(String redisHost, int redisPort, String redisPassword, Long eventId) {
+        public TrafficCountRedisSink(String redisHost, int redisPort, String redisPassword) {
             this.redisHost = redisHost;
             this.redisPort = redisPort;
             this.redisPassword = redisPassword;
-            this.eventId = eventId;
         }
 
         @Override
@@ -271,7 +304,7 @@ public class EventTrafficMonitorJob implements CommandLineRunner {
             poolConfig.setMaxTotal(10);
             poolConfig.setMaxIdle(5);
             poolConfig.setMinIdle(2);
-            poolConfig.setMaxWait(3000);
+            poolConfig.setMaxWaitMillis(3000);
 
             if (redisPassword != null && !redisPassword.isEmpty()) {
                 jedisPool = new JedisPool(poolConfig, redisHost, redisPort, 3000, redisPassword);
@@ -285,6 +318,7 @@ public class EventTrafficMonitorJob implements CommandLineRunner {
             try (Jedis jedis = jedisPool.getResource()) {
                 String type = value.getAlertType();
                 Long count = value.getCountValue();
+                Long eventId = value.getEventId();
                 if ("pedestrian".equals(type)) {
                     String key = "event:" + eventId + ":pedestrian:total";
                     jedis.incrBy(key, count != null ? count : 0L);

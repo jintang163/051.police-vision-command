@@ -1,4 +1,4 @@
-package com.police.vision.flink.entity;
+package com.police.vision.common.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -9,7 +9,7 @@ import java.io.Serializable;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class EventTrafficCapture implements Serializable {
+public class EventTrafficDataDTO implements Serializable {
 
     private static final long serialVersionUID = 1L;
 

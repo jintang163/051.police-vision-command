@@ -6,10 +6,12 @@ import com.police.vision.common.result.Result;
 import com.police.vision.common.result.ResultCode;
 import com.police.vision.event.entity.SecEvent;
 import com.police.vision.event.entity.SecEventResource;
+import com.police.vision.event.entity.vo.CameraPointVO;
+import com.police.vision.event.entity.vo.PoliceLocationVO;
+import com.police.vision.event.feign.GisFeignClient;
 import com.police.vision.event.mapper.SecEventMapper;
 import com.police.vision.event.mapper.SecEventResourceMapper;
 import com.police.vision.event.util.GeoUtil;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.locationtech.jts.geom.Polygon;
@@ -19,7 +21,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -30,15 +31,10 @@ public class EventResourceService {
 
     private final SecEventMapper secEventMapper;
     private final SecEventResourceMapper secEventResourceMapper;
+    private final GisFeignClient gisFeignClient;
 
     @Value("${event.resources.default-radius:1000}")
     private Double defaultRadius;
-
-    @Value("${event.resources.mock-police:}")
-    private String mockPoliceConfig;
-
-    @Value("${event.resources.mock-camera:}")
-    private String mockCameraConfig;
 
     public static final String RESOURCE_TYPE_POLICE = "police";
     public static final String RESOURCE_TYPE_CAMERA = "camera";
@@ -60,9 +56,12 @@ public class EventResourceService {
             double centerLng = center[0];
             double centerLat = center[1];
             log.info("活动区域中心点：经度={}, 纬度={}", centerLng, centerLat);
+
             clearEventResources(eventId);
+
             int policeCount = allocatePoliceResources(eventId, polygon, centerLng, centerLat, searchRadius);
             int cameraCount = allocateCameraResources(eventId, polygon, centerLng, centerLat, searchRadius);
+
             int total = policeCount + cameraCount;
             log.info("分配活动资源完成，活动ID：{}，警力：{}人，摄像头：{}个，总计：{}个",
                     eventId, policeCount, cameraCount, total);
@@ -103,19 +102,35 @@ public class EventResourceService {
 
     private int allocatePoliceResources(Long eventId, Polygon polygon,
                                         double centerLng, double centerLat, double radius) {
-        List<MockResource> mockPoliceList = buildMockPoliceList();
+        Result<List<PoliceLocationVO>> result = gisFeignClient.getPoliceDistribution();
+        if (result == null || !result.isSuccess()) {
+            String errorMsg = (result != null) ? result.getMessage() : "调用GIS服务失败";
+            log.error("调用GIS服务获取警力分布失败：{}", errorMsg);
+            throw new BusinessException(ResultCode.SERVICE_UNAVAILABLE, "获取警力分布失败：" + errorMsg);
+        }
+        List<PoliceLocationVO> policeList = result.getData();
+        if (policeList == null || policeList.isEmpty()) {
+            log.warn("GIS服务返回空警力列表");
+            return 0;
+        }
+
         int count = 0;
-        for (MockResource resource : mockPoliceList) {
-            boolean inPolygon = GeoUtil.isPointInPolygon(resource.getLng(), resource.getLat(), polygon);
-            double distance = GeoUtil.haversineDistance(centerLng, centerLat, resource.getLng(), resource.getLat());
+        for (PoliceLocationVO police : policeList) {
+            if (police.getLongitude() == null || police.getLatitude() == null) {
+                continue;
+            }
+            double lng = police.getLongitude().doubleValue();
+            double lat = police.getLatitude().doubleValue();
+            boolean inPolygon = GeoUtil.isPointInPolygon(lng, lat, polygon);
+            double distance = GeoUtil.haversineDistance(centerLng, centerLat, lng, lat);
             if (inPolygon || distance <= radius) {
                 SecEventResource eventResource = new SecEventResource();
                 eventResource.setEventId(eventId);
                 eventResource.setResourceType(RESOURCE_TYPE_POLICE);
-                eventResource.setResourceId(resource.getId());
-                eventResource.setResourceName(resource.getName());
-                eventResource.setLng(resource.getLng());
-                eventResource.setLat(resource.getLat());
+                eventResource.setResourceId(police.getPoliceId());
+                eventResource.setResourceName(police.getName());
+                eventResource.setLng(lng);
+                eventResource.setLat(lat);
                 eventResource.setDistance(distance);
                 secEventResourceMapper.insert(eventResource);
                 count++;
@@ -127,19 +142,35 @@ public class EventResourceService {
 
     private int allocateCameraResources(Long eventId, Polygon polygon,
                                         double centerLng, double centerLat, double radius) {
-        List<MockResource> mockCameraList = buildMockCameraList();
+        Result<List<CameraPointVO>> result = gisFeignClient.getCameraPoints();
+        if (result == null || !result.isSuccess()) {
+            String errorMsg = (result != null) ? result.getMessage() : "调用GIS服务失败";
+            log.error("调用GIS服务获取摄像头点位失败：{}", errorMsg);
+            throw new BusinessException(ResultCode.SERVICE_UNAVAILABLE, "获取摄像头点位失败：" + errorMsg);
+        }
+        List<CameraPointVO> cameraList = result.getData();
+        if (cameraList == null || cameraList.isEmpty()) {
+            log.warn("GIS服务返回空摄像头列表");
+            return 0;
+        }
+
         int count = 0;
-        for (MockResource resource : mockCameraList) {
-            boolean inPolygon = GeoUtil.isPointInPolygon(resource.getLng(), resource.getLat(), polygon);
-            double distance = GeoUtil.haversineDistance(centerLng, centerLat, resource.getLng(), resource.getLat());
+        for (CameraPointVO camera : cameraList) {
+            if (camera.getLongitude() == null || camera.getLatitude() == null) {
+                continue;
+            }
+            double lng = camera.getLongitude().doubleValue();
+            double lat = camera.getLatitude().doubleValue();
+            boolean inPolygon = GeoUtil.isPointInPolygon(lng, lat, polygon);
+            double distance = GeoUtil.haversineDistance(centerLng, centerLat, lng, lat);
             if (inPolygon || distance <= radius) {
                 SecEventResource eventResource = new SecEventResource();
                 eventResource.setEventId(eventId);
                 eventResource.setResourceType(RESOURCE_TYPE_CAMERA);
-                eventResource.setResourceId(resource.getId());
-                eventResource.setResourceName(resource.getName());
-                eventResource.setLng(resource.getLng());
-                eventResource.setLat(resource.getLat());
+                eventResource.setResourceId(camera.getId());
+                eventResource.setResourceName(camera.getName());
+                eventResource.setLng(lng);
+                eventResource.setLat(lat);
                 eventResource.setDistance(distance);
                 secEventResourceMapper.insert(eventResource);
                 count++;
@@ -154,104 +185,5 @@ public class EventResourceService {
         wrapper.eq(SecEventResource::getEventId, eventId);
         int deleted = secEventResourceMapper.delete(wrapper);
         log.info("清除活动旧资源，活动ID：{}，删除数量：{}", eventId, deleted);
-    }
-
-    private List<MockResource> buildMockPoliceList() {
-        List<MockResource> list = new ArrayList<>();
-        if (StringUtils.hasText(mockPoliceConfig)) {
-            String[] items = mockPoliceConfig.split(";");
-            long id = 1000;
-            for (String item : items) {
-                try {
-                    String[] parts = item.split(",");
-                    if (parts.length >= 3) {
-                        MockResource resource = new MockResource();
-                        resource.setId(id++);
-                        resource.setName(parts[0]);
-                        resource.setLng(Double.parseDouble(parts[1]));
-                        resource.setLat(Double.parseDouble(parts[2]));
-                        list.add(resource);
-                    }
-                } catch (Exception e) {
-                    log.warn("解析警力配置失败：{}", item, e);
-                }
-            }
-        }
-        if (list.isEmpty()) {
-            list = getDefaultMockPoliceList();
-        }
-        return list;
-    }
-
-    private List<MockResource> buildMockCameraList() {
-        List<MockResource> list = new ArrayList<>();
-        if (StringUtils.hasText(mockCameraConfig)) {
-            String[] items = mockCameraConfig.split(";");
-            long id = 2000;
-            for (String item : items) {
-                try {
-                    String[] parts = item.split(",");
-                    if (parts.length >= 3) {
-                        MockResource resource = new MockResource();
-                        resource.setId(id++);
-                        resource.setName(parts[0]);
-                        resource.setLng(Double.parseDouble(parts[1]));
-                        resource.setLat(Double.parseDouble(parts[2]));
-                        list.add(resource);
-                    }
-                } catch (Exception e) {
-                    log.warn("解析摄像头配置失败：{}", item, e);
-                }
-            }
-        }
-        if (list.isEmpty()) {
-            list = getDefaultMockCameraList();
-        }
-        return list;
-    }
-
-    private List<MockResource> getDefaultMockPoliceList() {
-        List<MockResource> list = new ArrayList<>();
-        double baseLng = 116.4074;
-        double baseLat = 39.9042;
-        String[] names = {"张警官", "李警官", "王警官", "赵警官", "刘警官",
-                "陈警官", "杨警官", "黄警官", "周警官", "吴警官"};
-        long id = 1001;
-        for (int i = 0; i < names.length; i++) {
-            MockResource resource = new MockResource();
-            resource.setId(id++);
-            resource.setName(names[i]);
-            resource.setLng(baseLng + (i % 5 - 2) * 0.005);
-            resource.setLat(baseLat + (i / 5 - 1) * 0.005);
-            list.add(resource);
-        }
-        return list;
-    }
-
-    private List<MockResource> getDefaultMockCameraList() {
-        List<MockResource> list = new ArrayList<>();
-        double baseLng = 116.4074;
-        double baseLat = 39.9042;
-        String[] names = {"CAM-001", "CAM-002", "CAM-003", "CAM-004", "CAM-005",
-                "CAM-006", "CAM-007", "CAM-008", "CAM-009", "CAM-010",
-                "CAM-011", "CAM-012"};
-        long id = 2001;
-        for (int i = 0; i < names.length; i++) {
-            MockResource resource = new MockResource();
-            resource.setId(id++);
-            resource.setName(names[i]);
-            resource.setLng(baseLng + (i % 6 - 2.5) * 0.004);
-            resource.setLat(baseLat + (i / 6 - 1) * 0.006);
-            list.add(resource);
-        }
-        return list;
-    }
-
-    @Data
-    private static class MockResource {
-        private Long id;
-        private String name;
-        private Double lng;
-        private Double lat;
     }
 }

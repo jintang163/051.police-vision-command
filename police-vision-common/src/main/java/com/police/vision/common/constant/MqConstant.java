@@ -59,4 +59,13 @@ public class MqConstant {
     public static final String KAFKA_CONSUMER_GROUP_TRAFFIC = "traffic-capture-consumer-group";
     public static final String KAFKA_CONSUMER_GROUP_CONTROL = "vehicle-control-consumer-group";
     public static final String KAFKA_CONSUMER_GROUP_TRACK = "vehicle-track-consumer-group";
+
+    public static final String EVENT_TRAFFIC_DATA_TOPIC = "police-event-traffic-data-topic";
+    public static final String EVENT_TRAFFIC_ALERT_TOPIC = "police-event-traffic-alert-topic";
+    public static final String EVENT_TRAFFIC_DATA_GROUP = "police-event-traffic-data-group";
+    public static final String EVENT_TRAFFIC_ALERT_GROUP = "police-event-traffic-alert-group";
+    public static final String TAG_EVENT_TRAFFIC_DATA = "event_traffic_data";
+    public static final String TAG_EVENT_TRAFFIC_ALERT = "event_traffic_alert";
+
+    public static final String EVENT_MONITOR_STATUS_KEY = "event:monitor:status:";
 }

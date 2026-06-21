@@ -16,7 +16,7 @@ import java.util.Map;
 
 @Tag(name = "安保方案管理", description = "安保方案创建、发布、执行、归档及查询接口")
 @RestController
-@RequestMapping("/security-plan")
+@RequestMapping("/event/plan")
 @RequiredArgsConstructor
 @Slf4j
 public class SecurityPlanController {

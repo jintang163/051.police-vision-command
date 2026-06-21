@@ -1,4 +1,4 @@
-import { get } from '@/utils/request';
+import { get, post, put, del } from '@/utils/request';
 import {
   Alarm,
   Alert,
@@ -7,7 +7,12 @@ import {
   StatsData,
   ChartData,
   HeatmapPoint,
-  DashboardOverview
+  DashboardOverview,
+  Event,
+  EventCreateDTO,
+  EventUpdateDTO,
+  EventQueryDTO,
+  EventPageResult
 } from '@/types';
 
 export const getDashboardOverview = (): Promise<{ data: DashboardOverview }> => {
@@ -82,4 +87,32 @@ export const handleAlarm = (id: string, status: string): Promise<{ data: null }>
 
 export const handleAlert = (id: string, status: string): Promise<{ data: null }> => {
   return get(`/screen/alert/${id}/handle`, { status });
+};
+
+export const getEventList = (params?: EventQueryDTO): Promise<{ data: EventPageResult }> => {
+  return get('/event/list', params);
+};
+
+export const getEventDetail = (id: string): Promise<{ data: Event }> => {
+  return get(`/event/${id}`);
+};
+
+export const createEvent = (data: EventCreateDTO): Promise<{ data: Event }> => {
+  return post('/event', data);
+};
+
+export const updateEvent = (id: string, data: EventUpdateDTO): Promise<{ data: Event }> => {
+  return put(`/event/${id}`, data);
+};
+
+export const deleteEvent = (id: string): Promise<{ data: null }> => {
+  return del(`/event/${id}`);
+};
+
+export const startEvent = (id: string): Promise<{ data: Event }> => {
+  return put(`/event/${id}/start`);
+};
+
+export const endEvent = (id: string): Promise<{ data: Event }> => {
+  return put(`/event/${id}/end`);
 };

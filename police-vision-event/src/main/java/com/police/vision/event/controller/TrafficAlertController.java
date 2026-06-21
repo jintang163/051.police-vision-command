@@ -15,7 +15,7 @@ import java.util.Map;
 
 @Tag(name = "交通预警管理", description = "交通预警查询、处理、统计及监控启动接口")
 @RestController
-@RequestMapping("/traffic-alert")
+@RequestMapping("/event/alert")
 @RequiredArgsConstructor
 @Slf4j
 public class TrafficAlertController {
@@ -51,5 +51,17 @@ public class TrafficAlertController {
     @PostMapping("/monitor/start")
     public Result<String> startTrafficMonitor(@RequestBody @Valid TrafficMonitorDTO dto) {
         return trafficAlertService.startTrafficMonitor(dto);
+    }
+
+    @Operation(summary = "停止交通监控任务")
+    @PostMapping("/monitor/stop/{eventId}")
+    public Result<Void> stopTrafficMonitor(@PathVariable Long eventId) {
+        return trafficAlertService.stopTrafficMonitor(eventId);
+    }
+
+    @Operation(summary = "获取交通监控状态")
+    @GetMapping("/monitor/status/{eventId}")
+    public Result<Map<String, Object>> getMonitorStatus(@PathVariable Long eventId) {
+        return trafficAlertService.getMonitorStatus(eventId);
     }
 }
