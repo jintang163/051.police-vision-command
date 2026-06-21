@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: police-vision-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        namespace: police-vision
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: police-vision
+        file-extension: yaml
+        group: DEFAULT_GROUP
+        shared-configs:
+          - data-id: common-redis.yaml
+            group: DEFAULT_GROUP
+            refresh: true
+  profiles:
+    active: dev
+
+server:
+  port: 8080
+
+logging:
+  level:
+    org.springframework.cloud.gateway: debug
+    com.alibaba.nacos: info

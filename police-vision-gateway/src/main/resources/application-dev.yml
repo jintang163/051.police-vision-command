@@ -1,0 +1,84 @@
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: police-vision-auth
+          uri: lb://police-vision-auth
+          predicates:
+            - Path=/auth/**
+          filters:
+            - StripPrefix=1
+
+        - id: police-vision-gis
+          uri: lb://police-vision-gis
+          predicates:
+            - Path=/gis/**
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 50
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: police-vision-alarm
+          uri: lb://police-vision-alarm
+          predicates:
+            - Path=/alarm/**
+          filters:
+            - StripPrefix=1
+
+        - id: police-vision-video
+          uri: lb://police-vision-video
+          predicates:
+            - Path=/video/**
+          filters:
+            - StripPrefix=1
+
+        - id: police-vision-websocket
+          uri: lb:ws://police-vision-websocket
+          predicates:
+            - Path=/ws/**
+
+        - id: police-vision-flink
+          uri: lb://police-vision-flink
+          predicates:
+            - Path=/flink/**
+          filters:
+            - StripPrefix=1
+
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns: "*"
+            allowed-methods: "*"
+            allowed-headers: "*"
+            allow-credentials: true
+            max-age: 3600
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password:
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 50
+          max-idle: 20
+          min-idle: 5
+          max-wait: 3000ms
+
+  sentinel:
+    transport:
+      dashboard: 127.0.0.1:8858
+      port: 8719
+    eager: true
+    filter:
+      enabled: false

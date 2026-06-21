@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: police-vision-flink
+  profiles:
+    active: dev
+
+flink:
+  job:
+    name: PoliceVisionFlinkJob
+    parallelism: 4
+    checkpoint:
+      enabled: true
+      interval: 60000
+      timeout: 300000
+    state:
+      backend: filesystem
+      path: hdfs://localhost:9000/flink/checkpoints
+
+rocketmq:
+  name-server: 127.0.0.1:9876
+  consumer:
+    group: police-flink-consumer-group
+    pull-batch-size: 32
+  producer:
+    group: police-flink-producer-group
+
+redis:
+  host: 127.0.0.1
+  port: 6379
+  password:
+  database: 0
+
+mysql:
+  url: jdbc:mysql://127.0.0.1:3306/police_vision?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8
+  username: root
+  password: root123
+  driver-class-name: com.mysql.cj.jdbc.Driver
+
+elasticsearch:
+  hosts: 127.0.0.1:9200
+  username:
+  password:
+
+logging:
+  level:
+    com.police.vision: info
+    org.apache.flink: info

@@ -1,0 +1,83 @@
+spring:
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/police_vision?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+    username: root
+    password: root123
+    druid:
+      initial-size: 5
+      min-idle: 5
+      max-active: 50
+      max-wait: 3000
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1 FROM DUAL
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      pool-prepared-statements: true
+      max-pool-prepared-statement-per-connection-size: 20
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password:
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 50
+          max-idle: 20
+          min-idle: 5
+          max-wait: 3000ms
+
+  rocketmq:
+    name-server: 127.0.0.1:9876
+    producer:
+      group: police-vision-alarm-producer-group
+      send-message-timeout: 3000
+      retry-times-when-send-failed: 2
+    consumer:
+      group: police-vision-alarm-consumer-group
+
+  seata:
+    enabled: true
+    application-id: ${spring.application.name}
+    tx-service-group: police-vision-tx-group
+    service:
+      vgroup-mapping:
+        police-vision-tx-group: default
+    registry:
+      type: nacos
+      nacos:
+        server-addr: 127.0.0.1:8848
+        namespace: police-vision
+        group: SEATA_GROUP
+        cluster: default
+    config:
+      type: nacos
+      nacos:
+        server-addr: 127.0.0.1:8848
+        namespace: police-vision
+        group: SEATA_GROUP
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.police.vision.common.entity,com.police.vision.alarm.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: ASSIGN_ID
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn

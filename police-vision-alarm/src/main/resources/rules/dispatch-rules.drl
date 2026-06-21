@@ -1,0 +1,146 @@
+package com.police.vision.alarm.rules;
+
+import com.police.vision.alarm.entity.DispatchContext;
+import com.police.vision.alarm.entity.PoliceOfficer;
+import com.police.vision.common.util.GpsUtil;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+
+dialect "mvel"
+
+rule "火警派单规则"
+    salience 100
+    when
+        $context : DispatchContext(alarmType == 4)
+    then
+        $context.setPriority(1);
+        $context.setRequiredOfficerCount(2);
+        $context.setMaxDistance(3.0);
+        $context.setNeedFireTruck(true);
+        $context.setDispatchSuggestion("火警，派最近3公里内2名以上警力+消防车");
+
+        List<PoliceOfficer> available = $context.getAvailableOfficers();
+        if (available != null && !available.isEmpty()) {
+            List<PoliceOfficer> filtered = available.stream()
+                .filter(o -> o.getStatus() == 1)
+                .peek(o -> o.setDistance(GpsUtil.getDistance(
+                    $context.getLongitude(), $context.getLatitude(),
+                    o.getLongitude(), o.getLatitude())))
+                .filter(o -> o.getDistance() <= $context.getMaxDistance())
+                .sorted(Comparator.comparingDouble(PoliceOfficer::getDistance))
+                .limit($context.getRequiredOfficerCount())
+                .collect(Collectors.toList());
+            $context.getRecommendedOfficers().addAll(filtered);
+        }
+end
+
+rule "斗殴派单规则"
+    salience 90
+    when
+        $context : DispatchContext(alarmType == 2)
+    then
+        $context.setPriority(1);
+        $context.setRequiredOfficerCount(2);
+        $context.setMaxDistance(2.0);
+        $context.setDispatchSuggestion("斗殴，派最近2公里内2名警力");
+
+        List<PoliceOfficer> available = $context.getAvailableOfficers();
+        if (available != null && !available.isEmpty()) {
+            List<PoliceOfficer> filtered = available.stream()
+                .filter(o -> o.getStatus() == 1)
+                .peek(o -> o.setDistance(GpsUtil.getDistance(
+                    $context.getLongitude(), $context.getLatitude(),
+                    o.getLongitude(), o.getLatitude())))
+                .filter(o -> o.getDistance() <= $context.getMaxDistance())
+                .sorted(Comparator.comparingDouble(PoliceOfficer::getDistance))
+                .limit($context.getRequiredOfficerCount())
+                .collect(Collectors.toList());
+            $context.getRecommendedOfficers().addAll(filtered);
+        }
+end
+
+rule "盗窃派单规则"
+    salience 80
+    when
+        $context : DispatchContext(alarmType == 1)
+    then
+        $context.setPriority(3);
+        $context.setRequiredOfficerCount(1);
+        $context.setMaxDistance(5.0);
+        $context.setDispatchSuggestion("盗窃，派最近5公里内1名空闲警力");
+
+        List<PoliceOfficer> available = $context.getAvailableOfficers();
+        if (available != null && !available.isEmpty()) {
+            List<PoliceOfficer> filtered = available.stream()
+                .filter(o -> o.getStatus() == 1)
+                .peek(o -> o.setDistance(GpsUtil.getDistance(
+                    $context.getLongitude(), $context.getLatitude(),
+                    o.getLongitude(), o.getLatitude())))
+                .filter(o -> o.getDistance() <= $context.getMaxDistance())
+                .sorted(Comparator.comparingDouble(PoliceOfficer::getDistance))
+                .limit($context.getRequiredOfficerCount())
+                .collect(Collectors.toList());
+            $context.getRecommendedOfficers().addAll(filtered);
+        }
+end
+
+rule "走失派单规则"
+    salience 70
+    when
+        $context : DispatchContext(alarmType == 3)
+    then
+        $context.setPriority(2);
+        $context.setRequiredOfficerCount(1);
+        $context.setMaxDistance(3.0);
+        $context.setNeedNotifyStation(true);
+        $context.setDispatchSuggestion("走失，派最近3公里内1名警力+通知辖区派出所");
+
+        List<PoliceOfficer> available = $context.getAvailableOfficers();
+        if (available != null && !available.isEmpty()) {
+            List<PoliceOfficer> filtered = available.stream()
+                .filter(o -> o.getStatus() == 1)
+                .peek(o -> o.setDistance(GpsUtil.getDistance(
+                    $context.getLongitude(), $context.getLatitude(),
+                    o.getLongitude(), o.getLatitude())))
+                .filter(o -> o.getDistance() <= $context.getMaxDistance())
+                .sorted(Comparator.comparingDouble(PoliceOfficer::getDistance))
+                .limit($context.getRequiredOfficerCount())
+                .collect(Collectors.toList());
+            $context.getRecommendedOfficers().addAll(filtered);
+        }
+end
+
+rule "默认派单规则"
+    salience 10
+    when
+        $context : DispatchContext(recommendedOfficers.size == 0)
+    then
+        if ($context.getPriority() == null) {
+            $context.setPriority(3);
+        }
+        if ($context.getRequiredOfficerCount() == 0) {
+            $context.setRequiredOfficerCount(1);
+        }
+        if ($context.getMaxDistance() == 0) {
+            $context.setMaxDistance(10.0);
+        }
+        if ($context.getDispatchSuggestion() == null) {
+            $context.setDispatchSuggestion("常规警情，派最近10公里内1名警力");
+        }
+
+        List<PoliceOfficer> available = $context.getAvailableOfficers();
+        if (available != null && !available.isEmpty()) {
+            List<PoliceOfficer> filtered = available.stream()
+                .filter(o -> o.getStatus() == 1)
+                .peek(o -> o.setDistance(GpsUtil.getDistance(
+                    $context.getLongitude(), $context.getLatitude(),
+                    o.getLongitude(), o.getLatitude())))
+                .filter(o -> o.getDistance() <= $context.getMaxDistance())
+                .sorted(Comparator.comparingDouble(PoliceOfficer::getDistance))
+                .limit($context.getRequiredOfficerCount())
+                .collect(Collectors.toList());
+            $context.getRecommendedOfficers().addAll(filtered);
+        }
+end

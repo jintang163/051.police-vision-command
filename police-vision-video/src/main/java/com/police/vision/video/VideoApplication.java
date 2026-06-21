@@ -1,0 +1,25 @@
+package com.police.vision.video;
+
+import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
+import org.springframework.cloud.openfeign.EnableFeignClients;
+
+@SpringBootApplication(scanBasePackages = {"com.police.vision.video", "com.police.vision.common"})
+@EnableDiscoveryClient
+@EnableFeignClients
+@MapperScan("com.police.vision.video.mapper")
+public class VideoApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(VideoApplication.class, args);
+        System.out.println("""
+                ================================================
+                 公安视图智能综合实战指挥平台 - 视频智能分析服务启动成功
+                 端口: 8084
+                 文档: http://localhost:8084/doc.html
+                ================================================
+                """);
+    }
+}

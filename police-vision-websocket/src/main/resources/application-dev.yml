@@ -1,0 +1,32 @@
+spring:
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password:
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 100
+          max-idle: 50
+          min-idle: 10
+          max-wait: 3000ms
+
+  rocketmq:
+    name-server: 127.0.0.1:9876
+    producer:
+      group: police-websocket-producer
+      send-message-timeout: 3000
+    consumer:
+      group: police-websocket-consumer
+
+websocket:
+  path: /ws/screen
+  allowed-origins: "*"
+  heartbeat-interval: 30000
+  max-sessions: 1000
+  message-buffer-size: 8192
+
+knife4j:
+  enable: true
