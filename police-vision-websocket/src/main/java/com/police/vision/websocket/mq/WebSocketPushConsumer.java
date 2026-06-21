@@ -44,6 +44,9 @@ public class WebSocketPushConsumer implements RocketMQListener<String> {
                 case "real_time_stats" -> screenWebSocketHandler.pushRealTimeStats(data);
                 case "dispatch_order" -> screenWebSocketHandler.pushDispatchOrder(data);
                 case "dispatch_status" -> screenWebSocketHandler.pushDispatchStatus(data);
+                case "vehicle_follow" -> screenWebSocketHandler.pushVehicleFollowAlert(data);
+                case "vehicle_night_active" -> screenWebSocketHandler.pushVehicleNightActiveAlert(data);
+                case "vehicle_control" -> screenWebSocketHandler.pushVehicleControlAlert(data);
                 case "new_dispatch" -> {
                     Object policeIdObj = msgMap.get("policeId");
                     if (policeIdObj != null) {

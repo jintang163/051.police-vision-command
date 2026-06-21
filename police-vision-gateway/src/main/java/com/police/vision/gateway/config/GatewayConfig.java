@@ -108,6 +108,11 @@ public class GatewayConfig {
                 .setIntervalSec(1)
         );
 
+        rules.add(new GatewayFlowRule("police-vision-traffic")
+                .setCount(100)
+                .setIntervalSec(1)
+        );
+
         GatewayRuleManager.loadRules(rules);
     }
 

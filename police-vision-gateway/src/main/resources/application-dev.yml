@@ -72,6 +72,19 @@ spring:
           filters:
             - StripPrefix=1
 
+        - id: police-vision-traffic
+          uri: lb://police-vision-traffic
+          predicates:
+            - Path=/traffic/**
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 200
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@ipKeyResolver}"
+
       globalcors:
         cors-configurations:
           '[/**]':

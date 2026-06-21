@@ -175,8 +175,10 @@ public class VehicleControlService {
             }
         }
 
-        if (control.getAreaCode() != null && !control.getAreaCode().isEmpty()) {
-            if (data.getCrossingId() == null || !isCrossingInArea(data.getCrossingId(), control.getCrossingIds())) {
+        boolean hasAreaConfig = (control.getAreaCode() != null && !control.getAreaCode().isEmpty())
+                || (control.getCrossingIds() != null && !control.getCrossingIds().isEmpty());
+        if (hasAreaConfig) {
+            if (data.getCrossingId() == null || !isCrossingMatch(data.getCrossingId(), control.getAreaCode(), control.getCrossingIds())) {
                 return false;
             }
         }
@@ -195,12 +197,26 @@ public class VehicleControlService {
         return plateNo.matches(regex);
     }
 
-    private boolean isCrossingInArea(String crossingId, String crossingIds) {
-        if (crossingIds == null || crossingIds.isEmpty()) {
+    private boolean isCrossingMatch(String crossingId, String areaCode, String crossingIds) {
+        if ((areaCode == null || areaCode.isEmpty()) && (crossingIds == null || crossingIds.isEmpty())) {
             return true;
         }
-        Set<String> crossingSet = new HashSet<>(Arrays.asList(crossingIds.split(",")));
-        return crossingSet.contains(crossingId);
+
+        if (crossingIds != null && !crossingIds.isEmpty()) {
+            Set<String> crossingSet = new HashSet<>(Arrays.asList(crossingIds.split(",")));
+            if (crossingSet.contains(crossingId)) {
+                return true;
+            }
+        }
+
+        if (areaCode != null && !areaCode.isEmpty()) {
+            String areaPrefix = areaCode.length() > 6 ? areaCode.substring(0, 6) : areaCode;
+            if (crossingId != null && crossingId.startsWith(areaPrefix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private boolean matchTimeRule(String timeRules, LocalDateTime captureTime) {

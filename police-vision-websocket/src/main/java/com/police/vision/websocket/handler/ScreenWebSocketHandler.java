@@ -182,4 +182,19 @@ public class ScreenWebSocketHandler implements WebSocketHandler {
     public void pushDispatchToPolice(Long policeId, Object data) {
         sendToUser(policeId, mqUtil.buildWebSocketMessage("new_dispatch", data));
     }
+
+    public void pushVehicleFollowAlert(Object data) {
+        broadcast(mqUtil.buildWebSocketMessage("vehicle_follow_alert", data));
+        broadcast(mqUtil.buildWebSocketMessage("alert", data));
+    }
+
+    public void pushVehicleNightActiveAlert(Object data) {
+        broadcast(mqUtil.buildWebSocketMessage("vehicle_night_active_alert", data));
+        broadcast(mqUtil.buildWebSocketMessage("alert", data));
+    }
+
+    public void pushVehicleControlAlert(Object data) {
+        broadcast(mqUtil.buildWebSocketMessage("vehicle_control_alert", data));
+        broadcast(mqUtil.buildWebSocketMessage("alert", data));
+    }
 }
