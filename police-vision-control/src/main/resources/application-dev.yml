@@ -114,3 +114,36 @@ intelligence:
     risk-threshold: 0.6
     default-cron: "0 0 5 * * ?"
     sarima-auto-tune: true
+
+# ========= 阿里云语音机器人配置 =========
+aliyun:
+  dyvms:
+    enabled: true
+    access-key-id: LTAI5tYourAccessKeyId
+    access-key-secret: YourAccessKeySecret
+    endpoint: dyvmsapi.aliyuncs.com
+    region-id: cn-hangzhou
+    called-show-number: "01012345678"
+    tts-code: xiaoyun
+    speed: 0
+    volume: 0
+    pitch-rate: 0
+    connect-timeout: 10
+    read-timeout: 60
+    polling-interval: 30
+    max-polling-times: 60
+    default-auto-callback-delay-hours: 24
+
+# ========= 警情回访调度配置 =========
+callback:
+  default-template-id: TPL001
+  max-retry-times: 3
+  retry-interval-minutes: 30
+  working-hours-start: 8
+  working-hours-end: 20
+  auto-transfer-satisfaction-threshold: 3
+  auto-transfer-sentiment-threshold: 0
+  batch-size: 50
+  max-concurrent-calls: 20
+  save-recording: true
+  asr-enabled: true

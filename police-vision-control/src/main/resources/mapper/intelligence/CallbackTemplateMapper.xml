@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.control.mapper.intelligence.CallbackTemplateMapper">
+
+    <resultMap id="CallbackTemplateResultMap" type="com.police.vision.control.entity.intelligence.CallbackTemplate">
+        <id column="id" property="id"/>
+        <result column="template_id" property="templateId"/>
+        <result column="template_no" property="templateNo"/>
+        <result column="template_name" property="templateName"/>
+        <result column="template_type" property="templateType"/>
+        <result column="template_type_name" property="templateTypeName"/>
+        <result column="tts_code" property="ttsCode"/>
+        <result column="tts_name" property="ttsName"/>
+        <result column="welcome_text" property="welcomeText"/>
+        <result column="question1_timeliness" property="question1Timeliness"/>
+        <result column="question2_attitude" property="question2Attitude"/>
+        <result column="question3_solving" property="question3Solving"/>
+        <result column="extra_questions" property="extraQuestions"/>
+        <result column="end_thank_text" property="endThankText"/>
+        <result column="transfer_human_text" property="transferHumanText"/>
+        <result column="dissatisfaction_followup" property="dissatisfactionFollowup"/>
+        <result column="keywords_map" property="keywordsMap"/>
+        <result column="priority" property="priority"/>
+        <result column="status" property="status"/>
+        <result column="status_name" property="statusName"/>
+        <result column="default_flag" property="defaultFlag"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="create_by" property="createBy"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="selectDefaultTemplate" resultMap="CallbackTemplateResultMap">
+        SELECT *
+        FROM callback_template
+        WHERE default_flag = 1
+          AND status = 1
+          AND deleted = 0
+        ORDER BY priority ASC
+        LIMIT 1
+    </select>
+
+    <select id="selectEnabledTemplates" resultMap="CallbackTemplateResultMap">
+        SELECT *
+        FROM callback_template
+        WHERE status = 1
+          AND deleted = 0
+        ORDER BY priority ASC, id ASC
+    </select>
+
+</mapper>

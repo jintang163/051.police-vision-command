@@ -65,6 +65,10 @@
         <commons-lang3.version>3.14.0</commons-lang3.version>
         <httpclient.version>5.3.1</httpclient.version>
 
+        <aliyun-dyvmsapi.version>4.1.2</aliyun-dyvmsapi.version>
+        <aliyun-tea.version>1.1.19</aliyun-tea.version>
+        <aliyun-openapi.version>0.2.19</aliyun-openapi.version>
+
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
     </properties>
 
@@ -248,6 +252,22 @@
                 <groupId>com.police.vision</groupId>
                 <artifactId>police-vision-common</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.aliyun</groupId>
+                <artifactId>dyvmsapi20170525</artifactId>
+                <version>${aliyun-dyvmsapi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.aliyun</groupId>
+                <artifactId>tea-openapi</artifactId>
+                <version>${aliyun-openapi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.aliyun</groupId>
+                <artifactId>tea-util</artifactId>
+                <version>${aliyun-tea.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.control.mapper.intelligence.CallbackResultMapper">
+
+    <resultMap id="CallbackResultResultMap" type="com.police.vision.control.entity.intelligence.CallbackResult">
+        <id column="id" property="id"/>
+        <result column="callback_result_id" property="callbackResultId"/>
+        <result column="callback_task_id" property="callbackTaskId"/>
+        <result column="callback_task_no" property="callbackTaskNo"/>
+        <result column="call_id" property="callId"/>
+        <result column="call_duration" property="callDuration"/>
+        <result column="recording_url" property="recordingUrl"/>
+        <result column="asr_full_text" property="asrFullText"/>
+        <result column="asr_json" property="asrJson"/>
+        <result column="timeliness_score" property="timelinessScore"/>
+        <result column="attitude_score" property="attitudeScore"/>
+        <result column="solving_score" property="solvingScore"/>
+        <result column="overall_score" property="overallScore"/>
+        <result column="satisfaction_level" property="satisfactionLevel"/>
+        <result column="satisfaction_level_name" property="satisfactionLevelName"/>
+        <result column="sentiment_label" property="sentimentLabel"/>
+        <result column="sentiment_label_name" property="sentimentLabelName"/>
+        <result column="sentiment_score" property="sentimentScore"/>
+        <result column="sentiment_keywords" property="sentimentKeywords"/>
+        <result column="sentiment_analysis" property="sentimentAnalysis"/>
+        <result column="complaint_keywords" property="complaintKeywords"/>
+        <result column="praise_keywords" property="praiseKeywords"/>
+        <result column="suggestion_text" property="suggestionText"/>
+        <result column="summary_text" property="summaryText"/>
+        <result column="auto_transfer_human" property="autoTransferHuman"/>
+        <result column="transfer_reason" property="transferReason"/>
+        <result column="reviewer_id" property="reviewerId"/>
+        <result column="reviewer_name" property="reviewerName"/>
+        <result column="review_status" property="reviewStatus"/>
+        <result column="review_status_name" property="reviewStatusName"/>
+        <result column="review_time" property="reviewTime"/>
+        <result column="review_remark" property="reviewRemark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="create_by" property="createBy"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="selectByTaskId" resultMap="CallbackResultResultMap">
+        SELECT *
+        FROM callback_result
+        WHERE callback_task_id = #{taskId}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+</mapper>

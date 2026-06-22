@@ -95,6 +95,10 @@ html,body{height:100%;font-family:'PingFang SC','Microsoft YaHei','Helvetica Neu
 @media(max-width:900px){.stat-row{grid-template-columns:repeat(2,1fr)}.hotspot-layout,.opinion-layout{grid-template-columns:1fr}.cluster-grid,.model-grid{grid-template-columns:1fr}}
 .el-dialog{--el-dialog-bg-color:var(--bg-secondary)}
 .el-form-item__label{color:var(--text-secondary)!important}
+.stat-card{transition:transform .2s}
+.stat-card:hover{transform:translateY(-2px)}
+.stat-label{color:var(--text-secondary);font-size:13px;margin-bottom:6px}
+.stat-value{font-size:24px;font-weight:600}
 </style>
 </head>
 <body>
@@ -111,6 +115,7 @@ html,body{height:100%;font-family:'PingFang SC','Microsoft YaHei','Helvetica Neu
 <el-tab-pane label="串并案分析" name="cluster"></el-tab-pane>
 <el-tab-pane label="舆情监测" name="opinion"></el-tab-pane>
 <el-tab-pane label="研判模型" name="model"></el-tab-pane>
+<el-tab-pane label="警情回访" name="callback"></el-tab-pane>
 </el-tabs>
 
 <!-- ===== 情报报告 Tab ===== -->
@@ -370,6 +375,163 @@ html,body{height:100%;font-family:'PingFang SC','Microsoft YaHei','Helvetica Neu
 <div style="display:flex;justify-content:flex-end;margin-top:16px">
 <el-pagination background layout="total, prev, pager, next" :total="modelTotal" :page-size="modelFilter.pageSize" v-model:current-page="modelFilter.pageNum" @current-change="loadModels"></el-pagination>
 </div>
+</div>
+
+<!-- ===== 警情回访 Tab ===== -->
+<div v-if="activeTab==='callback'" v-loading="callbackLoading" style="padding:16px;">
+
+<el-row :gutter="16" style="margin-bottom:16px;">
+<el-col :span="4">
+<el-card shadow="hover" class="stat-card">
+<div class="stat-label">今日回访任务</div>
+<div class="stat-value" style="color:#409EFF;">{{callbackStat.today?.totalTask || 0}}</div>
+</el-card>
+</el-col>
+<el-col :span="4">
+<el-card shadow="hover" class="stat-card">
+<div class="stat-label">已完成</div>
+<div class="stat-value" style="color:#67C23A;">{{callbackStat.today?.finished || 0}}</div>
+</el-card>
+</el-col>
+<el-col :span="4">
+<el-card shadow="hover" class="stat-card">
+<div class="stat-label">完成率</div>
+<div class="stat-value" style="color:#E6A23C;">{{callbackStat.today?.finishRate || '0%'}}</div>
+</el-card>
+</el-col>
+<el-col :span="4">
+<el-card shadow="hover" class="stat-card">
+<div class="stat-label">平均综合评分</div>
+<div class="stat-value" style="color:#909399;">{{callbackStat.threeIndicators?.overall || '-'}}</div>
+</el-card>
+</el-col>
+<el-col :span="4">
+<el-card shadow="hover" class="stat-card">
+<div class="stat-label">非常满意+满意</div>
+<div class="stat-value" style="color:#67C23A;">{{callbackStat.today?.satisfiedCount || 0}}</div>
+</el-card>
+</el-col>
+<el-col :span="4">
+<el-card shadow="hover" class="stat-card">
+<div class="stat-label">需人工回访</div>
+<div class="stat-value" style="color:#F56C6C;">{{callbackStat.today?.transferHuman || 0}}</div>
+</el-card>
+</el-col>
+</el-row>
+
+<el-card shadow="never" style="margin-bottom:16px;">
+<el-form :inline="true" :model="callbackQuery" size="default">
+<el-form-item label="任务状态">
+<el-select v-model="callbackQuery.taskStatus" placeholder="全部" clearable style="width:140px;">
+<el-option label="待发起" :value="0"/>
+<el-option label="呼叫中" :value="1"/>
+<el-option label="已完成" :value="2"/>
+<el-option label="呼叫失败" :value="3"/>
+<el-option label="需人工回访" :value="4"/>
+<el-option label="已过期" :value="5"/>
+</el-select>
+</el-form-item>
+<el-form-item label="是否转人工">
+<el-select v-model="callbackQuery.transferHumanFlag" placeholder="全部" clearable style="width:140px;">
+<el-option label="否" :value="0"/>
+<el-option label="是" :value="1"/>
+</el-select>
+</el-form-item>
+<el-form-item label="所属区域">
+<el-input v-model="callbackQuery.areaCode" placeholder="区域代码" clearable style="width:140px;"/>
+</el-form-item>
+<el-form-item label="日期范围">
+<el-date-picker v-model="callbackQuery.dateRange" type="datetimerange" range-separator="至"
+start-placeholder="开始时间" end-placeholder="结束时间" value-format="YYYY-MM-DD HH:mm:ss"/>
+</el-form-item>
+<el-form-item label="关键字">
+<el-input v-model="callbackQuery.keyword" placeholder="姓名/任务编号/来源编号" clearable style="width:200px;"/>
+</el-form-item>
+<el-form-item>
+<el-button type="primary" @click="loadCallbackTasks">查 询</el-button>
+<el-button @click="resetCallbackQuery">重 置</el-button>
+<el-button type="success" @click="loadCallbackStat">刷 新 统 计</el-button>
+</el-form-item>
+</el-form>
+</el-card>
+
+<el-row :gutter="16" style="margin-bottom:16px;">
+<el-col :span="8">
+<el-card shadow="never">
+<template #header><div style="font-weight:600;">三指标平均分 (近7天)</div></template>
+<div ref="threeIndicatorChartRef" style="height:280px;"></div>
+</el-card>
+</el-col>
+<el-col :span="8">
+<el-card shadow="never">
+<template #header><div style="font-weight:600;">满意度分布 (近7天)</div></template>
+<div ref="satisfactionChartRef" style="height:280px;"></div>
+</el-card>
+</el-col>
+<el-col :span="8">
+<el-card shadow="never">
+<template #header><div style="font-weight:600;">处警单位满意度排名</div></template>
+<div ref="deptRankingChartRef" style="height:280px;"></div>
+</el-card>
+</el-col>
+</el-row>
+
+<el-card shadow="never">
+<template #header>
+<div style="display:flex;justify-content:space-between;align-items:center;">
+<div style="font-weight:600;">回访任务列表</div>
+<div>
+<el-button type="danger" size="small" @click="debugScan">调试: 扫描任务</el-button>
+<el-button type="warning" size="small" @click="debugPoll">调试: 轮询状态</el-button>
+</div>
+</div>
+</template>
+
+<el-table :data="callbackTasks" border stripe size="small" style="width:100%">
+<el-table-column prop="callbackTaskNo" label="任务编号" width="170"/>
+<el-table-column prop="sourceTypeName" label="来源" width="90"/>
+<el-table-column prop="caseTypeName" label="警情类型" width="120"/>
+<el-table-column prop="reporterName" label="报案人" width="100"/>
+<el-table-column prop="reporterPhone" label="联系电话" width="130"/>
+<el-table-column prop="alertOfficerName" label="处警警员" width="100"/>
+<el-table-column prop="alertDeptName" label="处警单位" width="140" show-overflow-tooltip/>
+<el-table-column label="任务状态" width="110">
+<template #default="{row}">
+<el-tag :type="callbackStatusTagType(row.taskStatus)">{{row.taskStatusName}}</el-tag>
+</template>
+</el-table-column>
+<el-table-column label="转人工" width="80" align="center">
+<template #default="{row}">
+<el-tag v-if="row.transferHumanFlag===1" type="danger">是</el-tag>
+<el-tag v-else type="info">否</el-tag>
+</template>
+</el-table-column>
+<el-table-column label="评分" width="100">
+<template #default="{row}">
+<span v-if="row._result">
+<el-rate :model-value="row._result.overallScore" disabled size="small"/>
+</span>
+<span v-else>-</span>
+</template>
+</el-table-column>
+<el-table-column prop="scheduledTime" label="计划回访时间" width="160"/>
+<el-table-column prop="callStartTime" label="实际呼叫时间" width="160"/>
+<el-table-column label="操作" width="240" fixed="right">
+<template #default="{row}">
+<el-button size="small" type="primary" link @click="viewCallbackDetail(row)">查看</el-button>
+<el-button v-if="row.taskStatus===0 || row.taskStatus===3" size="small" type="success" link @click="retryTask(row)">重试</el-button>
+<el-button v-if="row.taskStatus===4" size="small" type="warning" link @click="openManualFinish(row)">人工完成</el-button>
+</template>
+</el-table-column>
+</el-table>
+
+<div style="margin-top:12px;text-align:right;">
+<el-pagination background layout="prev, pager, next, total"
+:current-page="callbackQuery.pageNum" :page-size="callbackQuery.pageSize"
+:total="callbackTotal" @current-change="p => {callbackQuery.pageNum=p;loadCallbackTasks();}"/>
+</div>
+</el-card>
+
 </div>
 </div>
 
@@ -909,6 +1071,218 @@ ElementPlus.ElMessage.error('保存失败');
 }
 }
 
+// ========== 警情回访 ==========
+const callbackLoading = ref(false);
+const callbackQuery = reactive({
+taskStatus: null, transferHumanFlag: null, areaCode: '',
+dateRange: [], keyword: '', pageNum: 1, pageSize: 20
+});
+const callbackTasks = ref([]);
+const callbackTotal = ref(0);
+const callbackStat = reactive({ today:{}, threeIndicators:{}, satisfactionDist:[], deptRanking:[] });
+const threeIndicatorChartRef = ref(null);
+const satisfactionChartRef = ref(null);
+const deptRankingChartRef = ref(null);
+const currentCallbackDetail = ref(null);
+let threeIndicatorChartInstance = null;
+let satisfactionChartInstance = null;
+let deptRankingChartInstance = null;
+
+async function loadCallbackTasks(){
+callbackLoading.value = true;
+try {
+const body = {...callbackQuery};
+if (callbackQuery.dateRange && callbackQuery.dateRange.length===2) {
+body.startTime = callbackQuery.dateRange[0];
+body.endTime = callbackQuery.dateRange[1];
+}
+const res = await fetch('/api/intelligence/callback/task/page', {
+method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+}).then(r=>r.json());
+if (res.code===200 && res.data) {
+callbackTasks.value = res.data.records || [];
+callbackTotal.value = res.data.total || 0;
+await Promise.all(callbackTasks.value.map(async t => {
+try {
+const r2 = await fetch('/api/intelligence/callback/task/'+t.callbackTaskId).then(r=>r.json());
+if (r2.code===200) t._result = r2.data.result;
+} catch(e) {}
+}));
+} else {
+ElementPlus.ElMessage.error(res.msg || '加载任务失败');
+}
+} finally { callbackLoading.value = false; }
+}
+
+function resetCallbackQuery(){
+callbackQuery.taskStatus = null;
+callbackQuery.transferHumanFlag = null;
+callbackQuery.areaCode = '';
+callbackQuery.dateRange = [];
+callbackQuery.keyword = '';
+callbackQuery.pageNum = 1;
+callbackQuery.pageSize = 20;
+loadCallbackTasks();
+}
+
+function callbackStatusTagType(status){
+return ({0:'info',1:'warning',2:'success',3:'danger',4:'danger',5:'info'})[status] || 'info';
+}
+
+async function loadCallbackStat(){
+try {
+const res = await fetch('/api/intelligence/callback/statistics', {
+method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({days:7})
+}).then(r=>r.json());
+if (res.code===200 && res.data) {
+Object.assign(callbackStat, res.data);
+nextTick(()=>{ renderCallbackCharts(); });
+}
+} catch(e) { ElementPlus.ElMessage.error('加载统计失败'); }
+}
+
+function renderCallbackCharts(){
+if (threeIndicatorChartRef.value) {
+const d = callbackStat.threeIndicators || {};
+if (!threeIndicatorChartInstance) threeIndicatorChartInstance = echarts.init(threeIndicatorChartRef.value, 'dark');
+threeIndicatorChartInstance.setOption({
+backgroundColor:'transparent',
+tooltip:{},
+xAxis:{ type:'category', data:['处置及时性','警员态度','问题解决度','综合评分'],
+axisLine:{lineStyle:{color:'#2a3060'}}, axisLabel:{color:'#8b92a8'} },
+yAxis:{ type:'value', min:0, max:5,
+axisLine:{lineStyle:{color:'#2a3060'}}, axisLabel:{color:'#8b92a8'},
+splitLine:{lineStyle:{color:'rgba(42,48,96,0.5)'}} },
+series:[{
+type:'bar', barWidth:36,
+data:[
+{value:d.timeliness||0, itemStyle:{color:'#409EFF'}},
+{value:d.attitude||0, itemStyle:{color:'#67C23A'}},
+{value:d.solving||0, itemStyle:{color:'#E6A23C'}},
+{value:d.overall||0, itemStyle:{color:'#909399'}}
+],
+label:{show:true,position:'top',formatter:'{c}分',color:'#e0e6f0'}
+}]
+}, true);
+}
+if (satisfactionChartRef.value) {
+const arr = callbackStat.satisfactionDist || [];
+if (!satisfactionChartInstance) satisfactionChartInstance = echarts.init(satisfactionChartRef.value, 'dark');
+satisfactionChartInstance.setOption({
+backgroundColor:'transparent',
+tooltip:{trigger:'item', formatter:'{b}: {c} ({d}%)'},
+legend:{bottom:0, textStyle:{color:'#8b92a8'}},
+series:[{
+type:'pie', radius:['40%','65%'], center:['50%','45%'],
+data: arr.map(x=>({name:x.name, value:x.count,
+itemStyle:{color:({1:'#67C23A',2:'#90EE90',3:'#E6A23C',4:'#F56C6C',5:'#722ed1'})[x.level]||'#ccc'}})),
+label:{formatter:'{b}\n{d}%',color:'#e0e6f0'}
+}]
+}, true);
+}
+if (deptRankingChartRef.value) {
+const arr = (callbackStat.deptRanking||[]).slice(0,10).reverse();
+if (!deptRankingChartInstance) deptRankingChartInstance = echarts.init(deptRankingChartRef.value, 'dark');
+deptRankingChartInstance.setOption({
+backgroundColor:'transparent',
+tooltip:{trigger:'axis'},
+grid:{left:110,right:30,top:10,bottom:30},
+xAxis:{type:'value',min:0,max:5,axisLine:{lineStyle:{color:'#2a3060'}},axisLabel:{color:'#8b92a8'},splitLine:{lineStyle:{color:'rgba(42,48,96,0.5)'}}},
+yAxis:{type:'category', data:arr.map(x=>x.deptName||''),axisLine:{lineStyle:{color:'#2a3060'}},axisLabel:{color:'#8b92a8'}},
+series:[{
+type:'bar', barWidth:18,
+data:arr.map(x=>({
+value:x.avgScore||0,
+itemStyle:{color: (x.avgScore>=4.2)?'#67C23A':(x.avgScore>=3.5)?'#E6A23C':'#F56C6C'}
+})),
+label:{show:true,position:'right',formatter:'{c}分',color:'#e0e6f0'}
+}]
+}, true);
+}
+}
+
+async function viewCallbackDetail(row){
+try {
+const res = await fetch('/api/intelligence/callback/task/'+row.callbackTaskId).then(r=>r.json());
+if (res.code===200) {
+currentCallbackDetail.value = res.data;
+const d = res.data;
+const task = d.task || {};
+const result = d.result || null;
+let html = `<div style="max-height:500px;overflow:auto;">
+<h4 style="color:#00d4ff;margin:12px 0 8px;">任务信息</h4>
+<p style="margin:4px 0;font-size:13px;">任务编号：${task.callbackTaskNo||'-'}</p>
+<p style="margin:4px 0;font-size:13px;">报案人：${task.reporterName||'-'} / ${task.reporterPhone||'-'}</p>
+<p style="margin:4px 0;font-size:13px;">处警：${task.alertOfficerName||'-'} @ ${task.alertDeptName||'-'}</p>
+<p style="margin:4px 0;font-size:13px;">任务状态：${task.taskStatusName||'-'} / 呼叫次数：${task.callTimes||0}</p>
+<p style="margin:4px 0;font-size:13px;">计划回访：${task.scheduledTime||'-'}</p>
+<p style="margin:4px 0;font-size:13px;">实际呼叫：${task.callStartTime||'-'}，时长：${task.callDuration||0}秒</p>`;
+if (result) {
+const rateHtml = (result.overallScore||0) > 0
+? Array.from({length:5},(_,i)=>i<Math.round(result.overallScore)?'★':'☆').join('')
+: '-';
+html += `<h4 style="color:#00d4ff;margin:12px 0 8px;">回访结果</h4>
+<p style="margin:4px 0;font-size:13px;">综合评分：${rateHtml} (${result.overallScore||0}分)</p>
+<p style="margin:4px 0;font-size:13px;">及时性 ${result.timelinessScore||0}分 / 态度 ${result.attitudeScore||0}分 / 解决度 ${result.solvingScore||0}分</p>
+<p style="margin:4px 0;font-size:13px;">满意度：${result.satisfactionLevelName||'-'} / 情感：${result.sentimentLabelName||'-'} (${((result.sentimentScore||0)*100).toFixed(1)}%)</p>
+<h4 style="color:#00d4ff;margin:12px 0 8px;">AI摘要</h4>
+<p style="background:#fafafa;padding:8px;border-radius:4px;font-size:13px;line-height:1.6;">${result.summaryText||'（无）'}</p>`;
+if (result.suggestionText) {
+html += `<h4 style="color:#00d4ff;margin:12px 0 8px;">客户建议</h4>
+<p style="background:#fffbe6;padding:8px;border-radius:4px;font-size:13px;line-height:1.6;">${result.suggestionText}</p>`;
+}
+if (result.asrFullText) {
+html += `<h4 style="color:#00d4ff;margin:12px 0 8px;">通话全文</h4>
+<p style="background:#f0f2f5;padding:8px;border-radius:4px;font-size:12px;white-space:pre-wrap;line-height:1.6;">${result.asrFullText}</p>`;
+}
+} else {
+html += `<p style="color:#999;margin-top:12px;">暂无回访结果</p>`;
+}
+html += `</div>`;
+ElementPlus.ElMessageBox.alert(html, '回访详情', {
+dangerouslyUseHTMLString:true, showClose:true, confirmButtonText:'关闭', width:'640px'
+});
+}
+} catch(e) { ElementPlus.ElMessage.error('加载详情失败'); }
+}
+
+async function retryTask(row){
+try {
+const res = await fetch('/api/intelligence/callback/task/retry/'+row.callbackTaskId,{method:'POST'}).then(r=>r.json());
+if (res.code===200) { ElementPlus.ElMessage.success('已发起重试'); loadCallbackTasks(); }
+else ElementPlus.ElMessage.error(res.msg||'操作失败');
+} catch(e) { ElementPlus.ElMessage.error('操作失败'); }
+}
+
+function openManualFinish(row){
+ElementPlus.ElMessageBox.prompt('请输入人工回访备注（可留空）', '人工完成回访 - '+row.callbackTaskNo, {
+confirmButtonText:'提交', cancelButtonText:'取消', inputPattern:/[\s\S]*/, inputErrorMessage:''
+}).then(async({value}) => {
+try {
+const body = { taskId:row.callbackTaskId, reviewerId:1, reviewerName:'系统管理员', suggestionText:value||'' };
+const res = await fetch('/api/intelligence/callback/task/manual-finish',{
+method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+}).then(r=>r.json());
+if (res.code===200) { ElementPlus.ElMessage.success('提交成功'); loadCallbackTasks(); }
+else ElementPlus.ElMessage.error(res.msg||'提交失败');
+} catch(e) { ElementPlus.ElMessage.error('提交失败'); }
+}).catch(()=>{});
+}
+
+async function debugScan(){
+try {
+await fetch('/api/intelligence/callback/debug/scan/10',{method:'POST'}).then(r=>r.json());
+ElementPlus.ElMessage.success('已触发扫描'); setTimeout(()=>loadCallbackTasks(),800);
+} catch(e) { ElementPlus.ElMessage.error('操作失败'); }
+}
+
+async function debugPoll(){
+try {
+await fetch('/api/intelligence/callback/debug/poll',{method:'POST'}).then(r=>r.json());
+ElementPlus.ElMessage.success('已触发轮询'); setTimeout(()=>loadCallbackTasks(),800);
+} catch(e) { ElementPlus.ElMessage.error('操作失败'); }
+}
+
 // ========== 初始化 ==========
 function onTabChange(name) {
 if (name === 'report') { loadReports(); loadReportStats(); }
@@ -916,12 +1290,16 @@ else if (name === 'hotspot') { loadHotspots(); }
 else if (name === 'cluster') { loadClusters(); }
 else if (name === 'opinion') { loadOpinions(); }
 else if (name === 'model') { loadModels(); }
+else if (name === 'callback') { loadCallbackTasks(); loadCallbackStat(); }
 }
 
 function handleResize() {
 if (hotspotChartInstance) hotspotChartInstance.resize();
 if (trendChartInstance) trendChartInstance.resize();
 if (sentimentChartInstance) sentimentChartInstance.resize();
+if (threeIndicatorChartInstance) threeIndicatorChartInstance.resize();
+if (satisfactionChartInstance) satisfactionChartInstance.resize();
+if (deptRankingChartInstance) deptRankingChartInstance.resize();
 }
 
 onMounted(() => {
@@ -938,6 +1316,9 @@ window.removeEventListener('resize', handleResize);
 if (hotspotChartInstance) hotspotChartInstance.dispose();
 if (trendChartInstance) trendChartInstance.dispose();
 if (sentimentChartInstance) sentimentChartInstance.dispose();
+if (threeIndicatorChartInstance) threeIndicatorChartInstance.dispose();
+if (satisfactionChartInstance) satisfactionChartInstance.dispose();
+if (deptRankingChartInstance) deptRankingChartInstance.dispose();
 });
 
 return {
@@ -950,7 +1331,11 @@ clusterList, clusterTotal, clusterLoading, clusterFilter, expandedCluster, toggl
 markClusterHandled, clusterAnalyzeVisible, clusterAnalyzing, clusterAnalyzeForm, openClusterAnalyze, doClusterAnalyze,
 opinionList, opinionTotal, opinionLoading, opinionFilter, opinionKeywords, sentimentChart, loadOpinions, markOpinionHandled,
 modelList, modelTotal, modelLoading, modelFilter, loadModels, toggleModel, executeModel,
-modelDialogVisible, editingModel, modelForm, openModelDialog, saveModel
+modelDialogVisible, editingModel, modelForm, openModelDialog, saveModel,
+callbackLoading, callbackQuery, callbackTasks, callbackTotal, callbackStat,
+threeIndicatorChartRef, satisfactionChartRef, deptRankingChartRef, currentCallbackDetail,
+loadCallbackTasks, resetCallbackQuery, callbackStatusTagType, loadCallbackStat,
+renderCallbackCharts, viewCallbackDetail, retryTask, openManualFinish, debugScan, debugPoll
 };
 }
 });

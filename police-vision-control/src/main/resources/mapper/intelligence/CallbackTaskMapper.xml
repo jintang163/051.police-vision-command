@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.control.mapper.intelligence.CallbackTaskMapper">
+
+    <resultMap id="CallbackTaskResultMap" type="com.police.vision.control.entity.intelligence.CallbackTask">
+        <id column="id" property="id"/>
+        <result column="callback_task_id" property="callbackTaskId"/>
+        <result column="callback_task_no" property="callbackTaskNo"/>
+        <result column="source_type" property="sourceType"/>
+        <result column="source_type_name" property="sourceTypeName"/>
+        <result column="source_id" property="sourceId"/>
+        <result column="source_no" property="sourceNo"/>
+        <result column="case_type" property="caseType"/>
+        <result column="case_type_name" property="caseTypeName"/>
+        <result column="brief_description" property="briefDescription"/>
+        <result column="alert_officer_id" property="alertOfficerId"/>
+        <result column="alert_officer_name" property="alertOfficerName"/>
+        <result column="alert_dept_code" property="alertDeptCode"/>
+        <result column="alert_dept_name" property="alertDeptName"/>
+        <result column="reporter_name" property="reporterName"/>
+        <result column="reporter_phone" property="reporterPhone"/>
+        <result column="reporter_id_card" property="reporterIdCard"/>
+        <result column="report_time" property="reportTime"/>
+        <result column="close_time" property="closeTime"/>
+        <result column="close_dept_code" property="closeDeptCode"/>
+        <result column="close_dept_name" property="closeDeptName"/>
+        <result column="scheduled_time" property="scheduledTime"/>
+        <result column="template_id" property="templateId"/>
+        <result column="template_name" property="templateName"/>
+        <result column="priority" property="priority"/>
+        <result column="task_status" property="taskStatus"/>
+        <result column="task_status_name" property="taskStatusName"/>
+        <result column="call_id" property="callId"/>
+        <result column="call_start_time" property="callStartTime"/>
+        <result column="call_end_time" property="callEndTime"/>
+        <result column="call_duration" property="callDuration"/>
+        <result column="call_result" property="callResult"/>
+        <result column="call_result_msg" property="callResultMsg"/>
+        <result column="call_times" property="callTimes"/>
+        <result column="last_attempt_time" property="lastAttemptTime"/>
+        <result column="next_attempt_time" property="nextAttemptTime"/>
+        <result column="max_retry_times" property="maxRetryTimes"/>
+        <result column="transfer_human_flag" property="transferHumanFlag"/>
+        <result column="transfer_human_reason" property="transferHumanReason"/>
+        <result column="transfer_human_time" property="transferHumanTime"/>
+        <result column="human_officer_id" property="humanOfficerId"/>
+        <result column="human_officer_name" property="humanOfficerName"/>
+        <result column="human_finish_time" property="humanFinishTime"/>
+        <result column="area_code" property="areaCode"/>
+        <result column="area_name" property="areaName"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="create_by" property="createBy"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="selectScheduledTasks" resultMap="CallbackTaskResultMap">
+        SELECT *
+        FROM callback_task
+        WHERE task_status = 0
+          AND scheduled_time &lt;= DATE_ADD(NOW(), INTERVAL #{hours} HOUR)
+          AND deleted = 0
+        ORDER BY priority ASC, scheduled_time ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="updateTaskStatus">
+        UPDATE callback_task
+        SET task_status = #{status},
+            task_status_name = #{statusName},
+            update_time = NOW()
+        WHERE callback_task_id = #{taskId}
+          AND deleted = 0
+    </update>
+
+    <select id="countTodayTasks" resultType="java.util.Map">
+        SELECT
+            COUNT(1) AS total,
+            SUM(CASE WHEN task_status = 0 THEN 1 ELSE 0 END) AS pending,
+            SUM(CASE WHEN task_status = 1 THEN 1 ELSE 0 END) AS calling,
+            SUM(CASE WHEN task_status = 2 THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN task_status = 3 THEN 1 ELSE 0 END) AS failed,
+            SUM(CASE WHEN task_status = 4 THEN 1 ELSE 0 END) AS transfer_human,
+            SUM(CASE WHEN task_status = 5 THEN 1 ELSE 0 END) AS expired
+        FROM callback_task
+        WHERE DATE(create_time) = CURDATE()
+          AND deleted = 0
+    </select>
+
+    <select id="countSatisfactionByDays" resultType="java.util.Map">
+        SELECT
+            DATE(t.create_time) AS stat_date,
+            r.satisfaction_level AS satisfaction_level,
+            r.satisfaction_level_name AS satisfaction_level_name,
+            COUNT(1) AS cnt
+        FROM callback_task t
+        INNER JOIN callback_result r ON t.callback_task_id = r.callback_task_id
+        WHERE t.create_time &gt;= DATE_SUB(CURDATE(), INTERVAL #{days} DAY)
+          AND t.deleted = 0
+          AND r.deleted = 0
+        GROUP BY DATE(t.create_time), r.satisfaction_level, r.satisfaction_level_name
+        ORDER BY stat_date DESC, satisfaction_level ASC
+    </select>
+
+    <select id="avgThreeIndicators" resultType="java.util.Map">
+        SELECT
+            AVG(r.timeliness_score) AS avg_timeliness,
+            AVG(r.attitude_score) AS avg_attitude,
+            AVG(r.solving_score) AS avg_solving,
+            AVG(r.overall_score) AS avg_overall
+        FROM callback_task t
+        INNER JOIN callback_result r ON t.callback_task_id = r.callback_task_id
+        WHERE t.create_time &gt;= DATE_SUB(CURDATE(), INTERVAL #{days} DAY)
+          AND t.deleted = 0
+          AND r.deleted = 0
+    </select>
+
+    <select id="countByDept" resultType="java.util.Map">
+        SELECT
+            t.alert_dept_code AS dept_code,
+            t.alert_dept_name AS dept_name,
+            COUNT(1) AS total_tasks,
+            SUM(CASE WHEN t.task_status = 2 THEN 1 ELSE 0 END) AS completed_tasks,
+            AVG(r.overall_score) AS avg_overall,
+            SUM(CASE WHEN r.satisfaction_level &lt;= 2 THEN 1 ELSE 0 END) AS satisfied_cnt,
+            SUM(CASE WHEN r.satisfaction_level &gt;= 4 THEN 1 ELSE 0 END) AS dissatisfied_cnt
+        FROM callback_task t
+        LEFT JOIN callback_result r ON t.callback_task_id = r.callback_task_id
+        WHERE t.create_time &gt;= DATE_SUB(CURDATE(), INTERVAL #{days} DAY)
+          AND t.deleted = 0
+          AND (r.deleted = 0 OR r.deleted IS NULL)
+          <if test="areaCode != null and areaCode != ''">
+            AND t.area_code LIKE CONCAT(#{areaCode}, '%')
+          </if>
+        GROUP BY t.alert_dept_code, t.alert_dept_name
+        ORDER BY avg_overall DESC
+    </select>
+
+    <select id="selectCallingTimeoutTasks" resultMap="CallbackTaskResultMap">
+        SELECT *
+        FROM callback_task
+        WHERE task_status = 1
+          AND call_start_time &lt;= DATE_SUB(NOW(), INTERVAL #{minutes} MINUTE)
+          AND deleted = 0
+        ORDER BY call_start_time ASC
+    </select>
+
+    <select id="selectNeedRetryTasks" resultMap="CallbackTaskResultMap">
+        SELECT *
+        FROM callback_task
+        WHERE task_status = 3
+          AND call_times &lt; max_retry_times
+          AND (next_attempt_time IS NULL OR next_attempt_time &lt;= NOW())
+          AND deleted = 0
+        ORDER BY next_attempt_time ASC, priority ASC
+        LIMIT #{limit}
+    </select>
+
+</mapper>
