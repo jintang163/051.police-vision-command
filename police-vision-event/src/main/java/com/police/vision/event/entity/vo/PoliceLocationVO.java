@@ -11,6 +11,8 @@ public class PoliceLocationVO {
 
     private String policeNumber;
 
+    private String policeNo;
+
     private String name;
 
     private BigDecimal longitude;
@@ -20,4 +22,12 @@ public class PoliceLocationVO {
     private Integer status;
 
     private String deviceId;
+
+    private String deptName;
+
+    private String deptId;
+
+    private String phone;
+
+    private String rankLevel;
 }

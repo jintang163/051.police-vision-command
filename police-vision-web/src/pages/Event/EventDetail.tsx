@@ -18,11 +18,13 @@ import {
   BellOutlined,
   FileTextOutlined,
   VideoCameraOutlined,
-  EnvironmentOutlined
+  EnvironmentOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { SecEvent, PoliceForce, Camera } from '@/types';
 import { getEventDetail } from '@/services/eventApi';
+import EmergencyCommandPanel from './EmergencyCommandPanel';
 
 declare global {
   interface Window {
@@ -396,6 +398,15 @@ const EventDetail: React.FC<EventDetailProps> = ({
           统计报告
         </span>
       )
+    },
+    {
+      key: 'emergency',
+      label: (
+        <span>
+          <ThunderboltOutlined />
+          应急调度
+        </span>
+      )
     }
   ];
 
@@ -742,6 +753,14 @@ const EventDetail: React.FC<EventDetailProps> = ({
           <FileTextOutlined style={{ fontSize: 48, marginBottom: 16 }} />
           <p>统计报告功能开发中...</p>
         </div>
+      )}
+
+      {activeTab === 'emergency' && eventId && (
+        <EmergencyCommandPanel
+          eventId={String(eventId)}
+          eventName={eventData?.name}
+          eventLevel={eventData?.securityLevel}
+        />
       )}
     </div>
   );

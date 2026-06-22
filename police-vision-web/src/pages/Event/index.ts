@@ -5,3 +5,6 @@ export { default as EventDetail } from './EventDetail';
 export { default as ResourceAllocate } from './ResourceAllocate';
 export { default as SecurityPlanManager } from './SecurityPlanManager';
 export { default as TrafficMonitorPanel } from './TrafficMonitorPanel';
+export { default as EmergencyCommandPanel } from './EmergencyCommandPanel';
+export { default as WebrtcVideoPanel } from './WebrtcVideoPanel';
+export { default as FenceDrawPanel } from './FenceDrawPanel';

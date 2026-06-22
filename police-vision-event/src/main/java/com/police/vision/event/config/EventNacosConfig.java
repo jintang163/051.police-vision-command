@@ -30,4 +30,28 @@ public class EventNacosConfig {
 
     @Value("${event.gis.service-name:police-vision-gis}")
     private String gisServiceName;
+
+    @Value("${emergency.plan.default-resource-radius:500}")
+    private Double emergencyDefaultResourceRadius;
+
+    @Value("${emergency.plan.default-template:terrorism}")
+    private String emergencyDefaultTemplate;
+
+    @Value("${emergency.command.default-deadline-minutes:60}")
+    private Integer emergencyCommandDefaultDeadlineMinutes;
+
+    @Value("${emergency.command.retry-times:3}")
+    private Integer emergencyCommandRetryTimes;
+
+    @Value("${emergency.webrtc.max-participants:16}")
+    private Integer webrtcMaxParticipants;
+
+    @Value("${emergency.webrtc.room-expire-minutes:480}")
+    private Integer webrtcRoomExpireMinutes;
+
+    @Value("${emergency.sentinel.plan-start-qps:10}")
+    private Integer sentinelPlanStartQps;
+
+    @Value("${emergency.sentinel.command-dispatch-qps:50}")
+    private Integer sentinelCommandDispatchQps;
 }

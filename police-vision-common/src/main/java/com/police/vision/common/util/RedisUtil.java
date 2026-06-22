@@ -240,4 +240,12 @@ public class RedisUtil {
             throw new BusinessException(ResultCode.REDIS_ERROR);
         }
     }
+
+    public void setString(String key, String value, long timeout, TimeUnit unit) {
+        set(key, value, timeout, unit);
+    }
+
+    public String getString(String key) {
+        return get(key);
+    }
 }

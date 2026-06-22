@@ -456,3 +456,288 @@ export interface EventArea {
   radius?: number;
   paths?: Position[];
 }
+
+export interface EmergencyPlanTemplate {
+  code: string;
+  name: string;
+  priority: number;
+  description: string;
+  nacosConfigKey: string;
+}
+
+export interface EmergencyPlanStartResult {
+  planId: string;
+  planName: string;
+  eventId: string;
+  eventName: string;
+  startTime: string;
+  policeCount: number;
+  cameraCount: number;
+  supplyCount: number;
+  resourceRadius: number;
+  videoRoomId?: string;
+  videoRoomUrl?: string;
+  fallback?: boolean;
+  message?: string;
+}
+
+export interface EmergencyPlanStartDTO {
+  eventId: string;
+  planId?: string;
+  templateCode?: string;
+  resourceRadius?: number;
+  autoAllocateResources?: boolean;
+  autoStartVideoConference?: boolean;
+  operatorName?: string;
+  operatorId?: string;
+}
+
+export interface EmergencyCommand {
+  id: string;
+  commandNo: string;
+  eventId: string;
+  planId?: string;
+  commandTitle: string;
+  commandContent: string;
+  priority: 1 | 2 | 3 | 4;
+  status: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  senderId?: string;
+  senderName?: string;
+  receiverDeptIds?: string;
+  receiverNames?: string;
+  dispatchTime?: string;
+  receiveTime?: string;
+  executeStartTime?: string;
+  feedbackTime?: string;
+  completeTime?: string;
+  feedbackContent?: string;
+  feedbackAttachments?: string;
+  deadlineMinutes: number;
+  timeoutCount: number;
+  remark?: string;
+  parentCommandId?: string;
+  createTime?: string;
+  updateTime?: string;
+}
+
+export interface EmergencyCommandCreateDTO {
+  eventId: string;
+  planId?: string;
+  commandTitle: string;
+  commandContent: string;
+  priority?: number;
+  deadlineMinutes?: number;
+  senderName?: string;
+  senderId?: string;
+  receiverDeptIds?: string[];
+  receiverNames?: string[];
+  remark?: string;
+}
+
+export interface EmergencyCommandFeedbackDTO {
+  commandId: string;
+  operatorId: string;
+  operatorName?: string;
+  operatorDept?: string;
+  feedbackContent?: string;
+  feedbackAttachments?: string;
+  toStatus?: number;
+  operateRemark?: string;
+  extraData?: Record<string, any>;
+}
+
+export interface CommandStatusLog {
+  id: string;
+  commandId: string;
+  fromStatus?: number;
+  toStatus: number;
+  operatorId?: string;
+  operatorName?: string;
+  operatorDept?: string;
+  operateTime: string;
+  operateRemark?: string;
+  extraData?: string;
+}
+
+export interface EmergencyCommandDetail {
+  command: EmergencyCommand;
+  statusLogs: CommandStatusLog[];
+}
+
+export interface EmergencyResourceQueryDTO {
+  eventId: string;
+  lng?: number;
+  lat?: number;
+  radiusMeters?: number;
+  resourceType?: 'police' | 'camera' | 'supply';
+}
+
+export interface EmergencyResourceResult {
+  centerLng: number;
+  centerLat: number;
+  radiusMeters: number;
+  policeList?: EmergencyResourcePolice[];
+  policeCount?: number;
+  cameraList?: EmergencyResourceCamera[];
+  cameraCount?: number;
+  supplyList?: EmergencySupply[];
+  supplyCount?: number;
+}
+
+export interface EmergencyResourcePolice {
+  policeId: string;
+  name: string;
+  policeNo?: string;
+  dept?: string;
+  status?: number;
+  lng: number;
+  lat: number;
+  phone?: string;
+  deviceId?: string;
+  distanceMeters: number;
+}
+
+export interface EmergencyResourceCamera {
+  cameraId: string;
+  name: string;
+  deviceNo?: string;
+  status?: number;
+  lng: number;
+  lat: number;
+  address?: string;
+  rtspUrl?: string;
+  distanceMeters: number;
+}
+
+export interface EmergencySupply {
+  id: string;
+  eventId: string;
+  supplyName: string;
+  supplyType: string;
+  quantity: number;
+  unit: string;
+  lng: number;
+  lat: number;
+  address?: string;
+  contactPerson?: string;
+  contactPhone?: string;
+  status: number;
+  distanceMeters?: number;
+  description?: string;
+}
+
+export interface EmergencyFence {
+  id: string;
+  eventId: string;
+  fenceName: string;
+  fenceType: 'blockade' | 'control' | 'prevention' | 'assembly' | 'checkpoint';
+  fenceGeometry: string;
+  centerLng?: number;
+  centerLat?: number;
+  radiusMeters?: number;
+  fillColor?: string;
+  strokeColor?: string;
+  strokeWeight?: number;
+  opacity?: number;
+  sortOrder?: number;
+  creatorId?: string;
+  creatorName?: string;
+  status: number;
+  description?: string;
+  createTime?: string;
+  updateTime?: string;
+}
+
+export interface EmergencyFenceCreateDTO {
+  eventId: string;
+  fenceName: string;
+  fenceType?: string;
+  fenceGeometry: string;
+  centerLng?: number;
+  centerLat?: number;
+  radiusMeters?: number;
+  fillColor?: string;
+  strokeColor?: string;
+  strokeWeight?: number;
+  opacity?: number;
+  sortOrder?: number;
+  creatorId?: string;
+  creatorName?: string;
+  description?: string;
+}
+
+export interface WebrtcRoomJoinDTO {
+  eventId: string;
+  userId: string;
+  userName?: string;
+  userRole?: string;
+  enableVideo?: boolean;
+  enableAudio?: boolean;
+}
+
+export interface WebrtcRoomJoinResult {
+  roomId: string;
+  roomInfo: WebrtcRoomInfo;
+  participants: WebrtcParticipant[];
+  selfInfo: WebrtcParticipant;
+  token: string;
+  signalServerUrl: string;
+}
+
+export interface WebrtcRoomInfo {
+  roomId: string;
+  eventId: string;
+  eventName: string;
+  createTime: number;
+  creatorId: string;
+  creatorName: string;
+  maxParticipants: number;
+  status: string;
+}
+
+export interface WebrtcParticipant {
+  userId: string;
+  userName: string;
+  userRole: string;
+  enableVideo: boolean;
+  enableAudio: boolean;
+  joinTime: number;
+  isMuted: boolean;
+  isVideoOff: boolean;
+  isHandRaised: boolean;
+}
+
+export interface WebrtcSignalDTO {
+  roomId: string;
+  userId: string;
+  userName?: string;
+  signalType: 'offer' | 'answer' | 'ice_candidate' | 'bye';
+  fromUserId?: string;
+  toUserId?: string;
+  data?: Record<string, any>;
+  eventId?: string;
+}
+
+export interface WebrtcActiveRoom {
+  roomId: string;
+  eventId: string;
+  eventName: string;
+  createTime: number;
+  creatorId: string;
+  creatorName: string;
+  participantCount: number;
+  maxParticipants: number;
+  status: string;
+}
+
+export interface CommandTimelineItem {
+  key: string;
+  status: number;
+  statusText: string;
+  statusColor: string;
+  time: string;
+  operatorName?: string;
+  operatorDept?: string;
+  remark?: string;
+  dotColor: string;
+}

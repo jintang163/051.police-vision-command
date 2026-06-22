@@ -11,6 +11,8 @@ public class CameraPointVO {
 
     private String deviceId;
 
+    private String deviceNo;
+
     private String name;
 
     private BigDecimal longitude;
@@ -24,4 +26,12 @@ public class CameraPointVO {
     private String brand;
 
     private String streamUrl;
+
+    private String rtspUrl;
+
+    private String address;
+
+    private String groupId;
+
+    private String groupName;
 }

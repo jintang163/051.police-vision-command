@@ -68,4 +68,21 @@ public class MqConstant {
     public static final String TAG_EVENT_TRAFFIC_ALERT = "event_traffic_alert";
 
     public static final String EVENT_MONITOR_STATUS_KEY = "event:monitor:status:";
+
+    public static final String EMERGENCY_COMMAND_TOPIC = "police-emergency-command-topic";
+    public static final String EMERGENCY_COMMAND_GROUP = "police-emergency-command-group";
+    public static final String EMERGENCY_COMMAND_BROADCAST_GROUP = "police-emergency-command-broadcast-group";
+    public static final String TAG_COMMAND_DISPATCH = "command_dispatch";
+    public static final String TAG_COMMAND_RECEIVE = "command_receive";
+    public static final String TAG_COMMAND_FEEDBACK = "command_feedback";
+    public static final String TAG_COMMAND_COMPLETE = "command_complete";
+    public static final String TAG_COMMAND_TIMEOUT = "command_timeout";
+    public static final String TAG_COMMAND_CANCEL = "command_cancel";
+    public static final String TAG_EMERGENCY_PLAN_START = "emergency_plan_start";
+    public static final String TAG_EMERGENCY_PLAN_END = "emergency_plan_end";
+    public static final String TAG_WEBRTC_SIGNAL = "webrtc_signal";
+    public static final String TAG_FENCE_UPDATE = "fence_update";
+
+    public static final String WEBRTC_SIGNAL_TOPIC = "police-webrtc-signal-topic";
+    public static final String WEBRTC_SIGNAL_GROUP = "police-webrtc-signal-group";
 }

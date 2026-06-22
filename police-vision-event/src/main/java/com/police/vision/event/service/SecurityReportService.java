@@ -461,48 +461,4 @@ public class SecurityReportService {
         sb.append("            <staticText>\n");
         sb.append("                <reportElement x=\"20\" y=\"").append(yPos).append("\" width=\"80\" height=\"20\"/>\n");
         sb.append("                <textElement fontSize=\"11\" isBold=\"true\"/>\n");
-        sb.append("                <text><![CDATA[").append(label).append("]]></text>\n");
-        sb.append("            </staticText>\n");
-        sb.append("            <textField>\n");
-        sb.append("                <reportElement x=\"100\" y=\"").append(yPos).append("\" width=\"").append(valueWidth).append("\" height=\"20\"/>\n");
-        sb.append("                <textElement fontSize=\"11\"/>\n");
-        sb.append("                <textFieldExpression><![CDATA[").append(expression).append("]]></textFieldExpression>\n");
-        sb.append("            </textField>\n");
-        return yPos + 22;
-    }
-
-    private String buildSummary(SecEvent event, int policeCount, int cameraCount, int postCount,
-                                 int alertCount, long pedestrianCount, long vehicleCount) {
-        return String.format("活动【%s】安保报告：投入警力%d人，摄像头%d个，设置岗点%d个；累计人流量%d人次，" +
-                        "车流量%d辆次，产生预警%d条。",
-                event.getEventName(), policeCount, cameraCount, postCount,
-                pedestrianCount, vehicleCount, alertCount);
-    }
-
-    private String generateReportFileName(Long eventId, String reportName) {
-        String dateStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        String safeName = reportName.replaceAll("[^a-zA-Z0-9\\u4e00-\\u9fa5]", "_");
-        return "event-reports/" + dateStr + "/" + eventId + "_" + safeName + "_" +
-                System.currentTimeMillis() + ".pdf";
-    }
-
-    private String extractFileNameFromUrl(String reportUrl) {
-        try {
-            int startIndex = reportUrl.indexOf("/event-reports/");
-            if (startIndex >= 0) {
-                String path = reportUrl.substring(startIndex + 1);
-                int queryIndex = path.indexOf('?');
-                return queryIndex > 0 ? path.substring(0, queryIndex) : path;
-            }
-            int lastSlash = reportUrl.lastIndexOf('/');
-            if (lastSlash >= 0 && lastSlash < reportUrl.length() - 1) {
-                String path = reportUrl.substring(lastSlash + 1);
-                int queryIndex = path.indexOf('?');
-                return queryIndex > 0 ? path.substring(0, queryIndex) : path;
-            }
-        } catch (Exception e) {
-            log.warn("解析报告文件名失败，url：{}", reportUrl, e);
-        }
-        return reportUrl;
-    }
-}
+        sb.append("                <text><![CDATA[").append(label).append

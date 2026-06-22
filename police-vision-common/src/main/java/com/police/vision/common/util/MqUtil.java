@@ -132,4 +132,23 @@ public class MqUtil {
             log.error("发送警员派单通知失败：policeId={}", policeId, e);
         }
     }
+
+    public void sendBroadcast(String destination, Object message) {
+        try {
+            String jsonMessage = JSON.toJSONString(message);
+            rocketMQTemplate.asyncSend(destination, jsonMessage, new org.apache.rocketmq.client.producer.SendCallback() {
+                @Override
+                public void onSuccess(org.apache.rocketmq.client.producer.SendResult sendResult) {
+                    log.debug("广播MQ消息成功：destination={}, msgId={}", destination, sendResult.getMsgId());
+                }
+
+                @Override
+                public void onException(Throwable throwable) {
+                    log.warn("广播MQ消息失败：destination={}", destination, throwable);
+                }
+            });
+        } catch (Exception e) {
+            log.warn("广播MQ消息异常：destination={}", destination, e);
+        }
+    }
 }

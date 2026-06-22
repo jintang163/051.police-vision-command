@@ -233,3 +233,108 @@ export const downloadReport = (reportId: string): string => {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8085';
   return `${baseUrl}/api/event/report/download/${reportId}`;
 };
+
+import {
+  EmergencyPlanTemplate,
+  EmergencyPlanStartResult,
+  EmergencyPlanStartDTO,
+  EmergencyCommand,
+  EmergencyCommandCreateDTO,
+  EmergencyCommandFeedbackDTO,
+  EmergencyCommandDetail,
+  EmergencyResourceQueryDTO,
+  EmergencyResourceResult,
+  EmergencyFence,
+  EmergencyFenceCreateDTO,
+  WebrtcRoomJoinDTO,
+  WebrtcRoomJoinResult,
+  WebrtcActiveRoom,
+  WebrtcSignalDTO
+} from '@/types';
+
+export const getEmergencyPlanTemplates = (): Promise<{ data: EmergencyPlanTemplate[] }> => {
+  return get('/api/emergency/plan/templates');
+};
+
+export const startEmergencyPlan = (data: EmergencyPlanStartDTO): Promise<{ data: EmergencyPlanStartResult }> => {
+  return post('/api/emergency/plan/start', data);
+};
+
+export const dispatchEmergencyCommand = (data: EmergencyCommandCreateDTO): Promise<{ data: EmergencyCommand }> => {
+  return post('/api/emergency/command/dispatch', data);
+};
+
+export const feedbackEmergencyCommand = (data: EmergencyCommandFeedbackDTO): Promise<{ data: EmergencyCommand }> => {
+  return post('/api/emergency/command/feedback', data);
+};
+
+export const getEmergencyCommandList = (
+  params: { eventId?: string; status?: number; priority?: number; page?: number; size?: number }
+): Promise<{ data: { list: EmergencyCommand[]; total: number; page: number; size: number } }> => {
+  return get('/api/emergency/command/list', params);
+};
+
+export const getEmergencyCommandDetail = (commandId: string): Promise<{ data: EmergencyCommandDetail }> => {
+  return get(`/api/emergency/command/${commandId}`);
+};
+
+export const queryEmergencyResources = (data: EmergencyResourceQueryDTO): Promise<{ data: EmergencyResourceResult }> => {
+  return post('/api/emergency/resources/query', data);
+};
+
+export const createEmergencyFence = (data: EmergencyFenceCreateDTO): Promise<{ data: EmergencyFence }> => {
+  return post('/api/emergency/fence/create', data);
+};
+
+export const updateEmergencyFence = (fenceId: string, data: EmergencyFenceCreateDTO): Promise<{ data: null }> => {
+  return put(`/api/emergency/fence/${fenceId}`, data);
+};
+
+export const deleteEmergencyFence = (fenceId: string): Promise<{ data: null }> => {
+  return del(`/api/emergency/fence/${fenceId}`);
+};
+
+export const getEmergencyFenceList = (
+  eventId: string,
+  status?: number
+): Promise<{ data: EmergencyFence[] }> => {
+  return get('/api/emergency/fence/list', { eventId, status });
+};
+
+export const getEmergencyFenceDetail = (fenceId: string): Promise<{ data: EmergencyFence }> => {
+  return get(`/api/emergency/fence/${fenceId}`);
+};
+
+export const batchDeleteEmergencyFences = (eventId: string): Promise<{ data: number }> => {
+  return del(`/api/emergency/fence/batch/event/${eventId}`);
+};
+
+export const joinWebrtcRoom = (data: WebrtcRoomJoinDTO): Promise<{ data: WebrtcRoomJoinResult }> => {
+  return post('/api/emergency/webrtc/room/join', data);
+};
+
+export const leaveWebrtcRoom = (roomId: string, userId: string, userName?: string): Promise<{ data: null }> => {
+  return post('/api/emergency/webrtc/room/leave', { roomId, userId: Number(userId), userName });
+};
+
+export const getWebrtcRoomInfo = (roomId: string): Promise<{ data: WebrtcRoomJoinResult }> => {
+  return get(`/api/emergency/webrtc/room/${roomId}`);
+};
+
+export const getActiveWebrtcRooms = (): Promise<{ data: WebrtcActiveRoom[] }> => {
+  return get('/api/emergency/webrtc/rooms/active');
+};
+
+export const sendWebrtcSignal = (data: WebrtcSignalDTO): Promise<{ data: null }> => {
+  return post('/api/emergency/webrtc/signal/send', data);
+};
+
+export const updateWebrtcParticipantStatus = (params: {
+  roomId: string;
+  userId: string;
+  enableAudio?: boolean;
+  enableVideo?: boolean;
+  isHandRaised?: boolean;
+}): Promise<{ data: Record<string, any> }> => {
+  return post('/api/emergency/webrtc/room/participant/status', null, params);
+};
