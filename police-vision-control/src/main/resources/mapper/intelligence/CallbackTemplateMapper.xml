@@ -24,6 +24,9 @@
         <result column="status" property="status"/>
         <result column="status_name" property="statusName"/>
         <result column="default_flag" property="defaultFlag"/>
+        <result column="interaction_mode" property="interactionMode"/>
+        <result column="interaction_mode_name" property="interactionModeName"/>
+        <result column="dialog_flow" property="dialogFlow"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
         <result column="create_by" property="createBy"/>

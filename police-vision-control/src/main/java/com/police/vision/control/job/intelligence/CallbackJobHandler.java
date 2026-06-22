@@ -19,6 +19,42 @@ public class CallbackJobHandler {
 
     private final CallbackDispatchService callbackDispatchService;
 
+    @XxlJob("callbackCaseScanHandler")
+    public void callbackCaseScanHandler() {
+        long startMs = System.currentTimeMillis();
+        try {
+            String param = XxlJobHelper.getJobParam();
+            XxlJobHelper.log("callbackCaseScanHandler 开始执行，param={}", param);
+
+            int batchSize = 100;
+            if (org.springframework.util.StringUtils.hasText(param)) {
+                try {
+                    String trimmed = param.trim();
+                    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                        com.alibaba.fastjson2.JSONObject json = com.alibaba.fastjson2.JSON.parseObject(trimmed);
+                        if (json.containsKey("batchSize")) {
+                            batchSize = json.getInteger("batchSize");
+                        }
+                    } else {
+                        batchSize = Integer.parseInt(trimmed);
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+
+            int createdCount = callbackDispatchService.scanClosedCasesAndCreateTasks(batchSize);
+            long costMs = System.currentTimeMillis() - startMs;
+
+            XxlJobHelper.log("callbackCaseScanHandler 执行完成，自动创建{}个回访任务，耗时{}ms", createdCount, costMs);
+            XxlJobHelper.handleSuccess(String.format("执行完成，创建%d个回访任务", createdCount));
+        } catch (Exception e) {
+            long costMs = System.currentTimeMillis() - startMs;
+            log.error("callbackCaseScanHandler 执行异常", e);
+            XxlJobHelper.log("callbackCaseScanHandler 执行异常: {}, 耗时{}ms", e.getMessage(), costMs);
+            XxlJobHelper.handleFail("执行失败: " + e.getMessage());
+        }
+    }
+
     @XxlJob("callbackScanHandler")
     public void callbackScanHandler() {
         long startMs = System.currentTimeMillis();

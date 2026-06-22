@@ -17,6 +17,8 @@ import com.police.vision.control.entity.intelligence.CallbackTemplate;
 import com.police.vision.control.mapper.intelligence.CallbackResultMapper;
 import com.police.vision.control.mapper.intelligence.CallbackTaskMapper;
 import com.police.vision.control.mapper.intelligence.CallbackTemplateMapper;
+import com.police.vision.control.mapper.intelligence.PoliceCaseInfoMapper;
+import com.police.vision.control.entity.intelligence.PoliceCaseInfo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,6 +40,7 @@ public class CallbackDispatchService {
     private final CallbackTaskMapper callbackTaskMapper;
     private final CallbackResultMapper callbackResultMapper;
     private final CallbackTemplateMapper callbackTemplateMapper;
+    private final PoliceCaseInfoMapper policeCaseInfoMapper;
     private final AliyunDyvmsService aliyunDyvmsService;
     private final DeepSeekService deepSeekService;
     private final CallbackConfig callbackConfig;
@@ -95,10 +98,57 @@ public class CallbackDispatchService {
         return task;
     }
 
-    public int scanAndDispatchTasks(int limit) {
+    @Transactional(rollbackFor = Exception.class)
+    public int scanClosedCasesAndCreateTasks(int limit) {
         int delayHours = callbackConfig.getDefaultAutoCallbackDelayHours() != null
                 ? callbackConfig.getDefaultAutoCallbackDelayHours() : 24;
-        List<CallbackTask> tasks = callbackTaskMapper.selectScheduledTasks(delayHours, limit);
+        int lookbackHours = delayHours + 72;
+
+        List<PoliceCaseInfo> closedCases = policeCaseInfoMapper.selectClosedCasesWithoutCallback(
+                delayHours, lookbackHours, limit);
+        if (closedCases == null || closedCases.isEmpty()) {
+            log.info("结案扫库：无新增已结案案件待回访");
+            return 0;
+        }
+
+        int createdCount = 0;
+        for (PoliceCaseInfo caseInfo : closedCases) {
+            try {
+                if (!StringUtils.hasText(caseInfo.getReporterPhone())) {
+                    log.warn("案件{}无报案人电话，跳过回访，caseId: {}", caseInfo.getCaseNo(), caseInfo.getCaseId());
+                    continue;
+                }
+
+                CallbackTaskCreateDTO dto = new CallbackTaskCreateDTO();
+                dto.setSourceType(1);
+                dto.setSourceId(caseInfo.getCaseId());
+                dto.setSourceNo(caseInfo.getCaseNo());
+                dto.setCaseType(caseInfo.getCaseType());
+                dto.setCaseTypeName(caseInfo.getCaseTypeName());
+                dto.setBriefDescription(caseInfo.getDescription());
+                dto.setAlertOfficerId(caseInfo.getHandlerId());
+                dto.setAlertOfficerName(caseInfo.getHandlerName());
+                dto.setAlertDeptCode(caseInfo.getPoliceStationCode());
+                dto.setAlertDeptName(caseInfo.getPoliceStationName());
+                dto.setAreaCode(caseInfo.getAreaCode());
+                dto.setAreaName(caseInfo.getAreaName());
+                dto.setReporterName(caseInfo.getReporterName());
+                dto.setReporterPhone(caseInfo.getReporterPhone());
+                dto.setReporterIdCard(caseInfo.getReporterIdCard());
+                dto.setCloseTime(caseInfo.getSolveTime());
+
+                createCallbackTask(dto);
+                createdCount++;
+            } catch (Exception e) {
+                log.error("自动创建回访任务异常，caseId: {}", caseInfo.getCaseId(), e);
+            }
+        }
+        log.info("结案扫库完成，扫描到{}个已结案案件，成功创建{}个回访任务", closedCases.size(), createdCount);
+        return createdCount;
+    }
+
+    public int scanAndDispatchTasks(int limit) {
+        List<CallbackTask> tasks = callbackTaskMapper.selectScheduledTasks(limit);
         if (tasks == null || tasks.isEmpty()) {
             log.info("扫描待回访任务：无待处理任务");
             return 0;
@@ -161,15 +211,36 @@ public class CallbackDispatchService {
         task.setCallTimes(callTimes + 1);
         task.setLastAttemptTime(LocalDateTime.now());
 
+        Integer interactionMode = template.getInteractionMode();
+        if (interactionMode == null) interactionMode = 2;
+        task.setCallType(interactionMode);
+        task.setCallTypeName(interactionMode == 1 ? "TTS播报" :
+                interactionMode == 2 ? "智能外呼" :
+                interactionMode == 3 ? "IVR按键" : "智能外呼");
+        task.setDialogStatus(1);
+        task.setCurrentNode("welcome");
+
         Map<String, String> ttsParam = buildTtsParam(task, template);
-        String ttsCode = StringUtils.hasText(template.getTtsCode())
-                ? template.getTtsCode() : aliyunDyvmsConfig.getTtsCode();
-        String callId = aliyunDyvmsService.singleCallByTts(
-                task.getReporterPhone(),
-                aliyunDyvmsConfig.getCalledShowNumber(),
-                ttsCode,
-                ttsParam
-        );
+        String callId;
+
+        if (interactionMode == 2) {
+            callId = aliyunDyvmsService.smartCall(
+                    task.getReporterPhone(),
+                    template,
+                    ttsParam
+            );
+            log.info("使用智能外呼模式发起回访，taskId: {}, template: {}", task.getCallbackTaskId(), template.getTemplateId());
+        } else {
+            String ttsCode = StringUtils.hasText(template.getTtsCode())
+                    ? template.getTtsCode() : aliyunDyvmsConfig.getTtsCode();
+            callId = aliyunDyvmsService.singleCallByTts(
+                    task.getReporterPhone(),
+                    aliyunDyvmsConfig.getCalledShowNumber(),
+                    ttsCode,
+                    ttsParam
+            );
+            log.info("使用TTS播报模式发起回访，taskId: {}, template: {}", task.getCallbackTaskId(), template.getTemplateId());
+        }
 
         if (!StringUtils.hasText(callId)) {
             log.error("语音外呼失败，taskId: {}, phone: {}", task.getCallbackTaskId(), task.getReporterPhone());

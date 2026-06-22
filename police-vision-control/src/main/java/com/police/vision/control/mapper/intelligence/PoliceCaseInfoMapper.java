@@ -61,4 +61,8 @@ public interface PoliceCaseInfoMapper extends BaseMapper<PoliceCaseInfo> {
                                             @Param("caseType") String caseType,
                                             @Param("areaCode") String areaCode,
                                             @Param("limit") int limit);
+
+    List<PoliceCaseInfo> selectClosedCasesWithoutCallback(@Param("delayHours") int delayHours,
+                                                           @Param("lookbackHours") int lookbackHours,
+                                                           @Param("limit") int limit);
 }

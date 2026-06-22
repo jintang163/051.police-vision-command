@@ -87,6 +87,14 @@ public class CallbackController {
         return Result.success(Map.of("dispatched", count));
     }
 
+    @PostMapping("/debug/case-scan/{limit}")
+    public Result<Map<String, Object>> debugCaseScan(@PathVariable Integer limit) {
+        log.info("[警情回访-调试] 触发结案扫库建任务, limit={}", limit);
+        int count = dispatchService.scanClosedCasesAndCreateTasks(limit);
+        log.info("[警情回访-调试] 结案扫库完成, 共创建{}条任务", count);
+        return Result.success(Map.of("created", count));
+    }
+
     @PostMapping("/debug/poll")
     public Result<Map<String, Object>> debugPoll() {
         log.info("[警情回访-调试] 触发轮询通话状态");

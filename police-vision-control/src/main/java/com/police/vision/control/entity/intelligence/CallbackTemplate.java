@@ -49,4 +49,10 @@ public class CallbackTemplate extends BaseEntity {
     private String statusName;
 
     private Integer defaultFlag;
+
+    private Integer interactionMode;
+
+    private String interactionModeName;
+
+    private String dialogFlow;
 }

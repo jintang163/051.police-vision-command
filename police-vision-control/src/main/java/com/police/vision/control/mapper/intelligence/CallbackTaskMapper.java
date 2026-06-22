@@ -11,7 +11,9 @@ import java.util.Map;
 @Mapper
 public interface CallbackTaskMapper extends BaseMapper<CallbackTask> {
 
-    List<CallbackTask> selectScheduledTasks(@Param("hours") Integer hours, @Param("limit") Integer limit);
+    List<CallbackTask> selectScheduledTasks(@Param("limit") Integer limit);
+
+    CallbackTask selectBySourceId(@Param("sourceType") Integer sourceType, @Param("sourceId") String sourceId);
 
     int updateTaskStatus(@Param("taskId") String taskId, @Param("status") Integer status, @Param("statusName") String statusName);
 

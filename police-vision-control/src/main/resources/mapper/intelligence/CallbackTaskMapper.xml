@@ -31,6 +31,10 @@
         <result column="task_status" property="taskStatus"/>
         <result column="task_status_name" property="taskStatusName"/>
         <result column="call_id" property="callId"/>
+        <result column="call_type" property="callType"/>
+        <result column="call_type_name" property="callTypeName"/>
+        <result column="dialog_status" property="dialogStatus"/>
+        <result column="current_node" property="currentNode"/>
         <result column="call_start_time" property="callStartTime"/>
         <result column="call_end_time" property="callEndTime"/>
         <result column="call_duration" property="callDuration"/>
@@ -60,10 +64,19 @@
         SELECT *
         FROM callback_task
         WHERE task_status = 0
-          AND scheduled_time &lt;= DATE_ADD(NOW(), INTERVAL #{hours} HOUR)
+          AND scheduled_time &lt;= NOW()
           AND deleted = 0
         ORDER BY priority ASC, scheduled_time ASC
         LIMIT #{limit}
+    </select>
+
+    <select id="selectBySourceId" resultMap="CallbackTaskResultMap">
+        SELECT *
+        FROM callback_task
+        WHERE source_type = #{sourceType}
+          AND source_id = #{sourceId}
+          AND deleted = 0
+        LIMIT 1
     </select>
 
     <update id="updateTaskStatus">

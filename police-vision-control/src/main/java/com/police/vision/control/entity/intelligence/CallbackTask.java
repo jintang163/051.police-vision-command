@@ -66,6 +66,14 @@ public class CallbackTask extends BaseEntity {
 
     private String callId;
 
+    private Integer callType;
+
+    private String callTypeName;
+
+    private Integer dialogStatus;
+
+    private String currentNode;
+
     private LocalDateTime callStartTime;
 
     private LocalDateTime callEndTime;

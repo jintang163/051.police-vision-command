@@ -68,4 +68,12 @@ public class PoliceCaseInfo extends BaseEntity {
     private String policeStationName;
 
     private String description;
+
+    private String reporterName;
+
+    private String reporterPhone;
+
+    private String reporterIdCard;
+
+    private LocalDateTime reportTime;
 }

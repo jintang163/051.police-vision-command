@@ -2,4 +2,61 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.police.vision.control.mapper.intelligence.PoliceCaseInfoMapper">
 
+    <resultMap id="PoliceCaseInfoResultMap" type="com.police.vision.control.entity.intelligence.PoliceCaseInfo">
+        <id column="id" property="id"/>
+        <result column="case_id" property="caseId"/>
+        <result column="case_no" property="caseNo"/>
+        <result column="case_type" property="caseType"/>
+        <result column="case_type_name" property="caseTypeName"/>
+        <result column="case_sub_type" property="caseSubType"/>
+        <result column="case_level" property="caseLevel"/>
+        <result column="case_level_name" property="caseLevelName"/>
+        <result column="modus_operandi" property="modusOperandi"/>
+        <result column="case_keywords" property="caseKeywords"/>
+        <result column="area_code" property="areaCode"/>
+        <result column="area_name" property="areaName"/>
+        <result column="longitude" property="longitude"/>
+        <result column="latitude" property="latitude"/>
+        <result column="address" property="address"/>
+        <result column="case_time" property="caseTime"/>
+        <result column="weapon_type" property="weaponType"/>
+        <result column="target_type" property="targetType"/>
+        <result column="suspect_ids" property="suspectIds"/>
+        <result column="suspect_names" property="suspectNames"/>
+        <result column="vehicle_ids" property="vehicleIds"/>
+        <result column="grid_code" property="gridCode"/>
+        <result column="is_solved" property="isSolved"/>
+        <result column="solve_time" property="solveTime"/>
+        <result column="handler_id" property="handlerId"/>
+        <result column="handler_name" property="handlerName"/>
+        <result column="police_station_code" property="policeStationCode"/>
+        <result column="police_station_name" property="policeStationName"/>
+        <result column="description" property="description"/>
+        <result column="reporter_name" property="reporterName"/>
+        <result column="reporter_phone" property="reporterPhone"/>
+        <result column="reporter_id_card" property="reporterIdCard"/>
+        <result column="report_time" property="reportTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="selectClosedCasesWithoutCallback" resultMap="PoliceCaseInfoResultMap">
+        SELECT c.*
+        FROM police_case_info c
+        WHERE c.is_solved = 1
+          AND c.solve_time IS NOT NULL
+          AND c.solve_time &lt;= DATE_SUB(NOW(), INTERVAL #{delayHours} HOUR)
+          AND c.solve_time &gt;= DATE_SUB(NOW(), INTERVAL #{lookbackHours} HOUR)
+          AND c.deleted = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM callback_task t
+              WHERE t.source_id = c.case_id
+                AND t.source_type = 1
+                AND t.deleted = 0
+          )
+        ORDER BY c.solve_time ASC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

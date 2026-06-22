@@ -38,6 +38,10 @@ CREATE TABLE `callback_task` (
     `task_status`           TINYINT         DEFAULT 0               COMMENT '任务状态(0:待发起 1:呼叫中 2:已完成 3:呼叫失败 4:需人工回访 5:已过期)',
     `task_status_name`      VARCHAR(32)     DEFAULT NULL            COMMENT '任务状态名称',
     `call_id`               VARCHAR(128)    DEFAULT NULL            COMMENT '阿里云呼叫ID',
+    `call_type`             TINYINT         DEFAULT 2               COMMENT '呼叫类型(1:TTS播报 2:智能外呼 3:IVR按键)',
+    `call_type_name`        VARCHAR(32)     DEFAULT NULL            COMMENT '呼叫类型名称',
+    `dialog_status`         TINYINT         DEFAULT 0               COMMENT '对话状态(0:未开始 1:进行中 2:已完成 3:转人工 4:异常中断)',
+    `current_node`          VARCHAR(64)     DEFAULT NULL            COMMENT '当前对话节点ID',
     `call_start_time`       DATETIME        DEFAULT NULL            COMMENT '呼叫开始时间',
     `call_end_time`         DATETIME        DEFAULT NULL            COMMENT '呼叫结束时间',
     `call_duration`         INT             DEFAULT 0               COMMENT '通话时长(秒)',
@@ -150,6 +154,9 @@ CREATE TABLE `callback_template` (
     `status`                    TINYINT         DEFAULT 1               COMMENT '状态(0:禁用 1:启用)',
     `status_name`               VARCHAR(32)     DEFAULT NULL            COMMENT '状态名称',
     `default_flag`              TINYINT         DEFAULT 0               COMMENT '是否默认模板(0:否 1:是)',
+    `interaction_mode`          TINYINT         DEFAULT 2               COMMENT '交互模式(1:TTS播报 2:智能外呼 3:IVR按键)',
+    `interaction_mode_name`     VARCHAR(32)     DEFAULT NULL            COMMENT '交互模式名称',
+    `dialog_flow`               VARCHAR(128)    DEFAULT NULL            COMMENT '对话流程ID(阿里云DialogFlow/智能外呼流程ID)',
     `create_time`               DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time`               DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `create_by`                 BIGINT          DEFAULT NULL            COMMENT '创建人',
@@ -171,7 +178,8 @@ INSERT INTO `callback_template` (
     `id`, `template_id`, `template_no`, `template_name`, `template_type`, `template_type_name`,
     `tts_code`, `tts_name`, `welcome_text`, `question1_timeliness`, `question2_attitude`,
     `question3_solving`, `extra_questions`, `end_thank_text`, `transfer_human_text`,
-    `dissatisfaction_followup`, `keywords_map`, `priority`, `status`, `status_name`, `default_flag`
+    `dissatisfaction_followup`, `keywords_map`, `priority`, `status`, `status_name`, `default_flag`,
+    `interaction_mode`, `interaction_mode_name`, `dialog_flow`
 ) VALUES (
     1, 'TPL001', 'TPL001', '标准警情回访', 1, '标准警情回访',
     'xiaoyun', '小云',
@@ -184,7 +192,8 @@ INSERT INTO `callback_template` (
     '好的，已为您转接人工坐席，请稍候。',
     '请问具体是哪方面让您不满意呢？可以简单描述一下吗？',
     '{"5分":["满意","很好","非常好","不错","可以","满分"],"4分":["还行","还可以","一般偏上","不错的"],"3分":["一般","还行吧","凑活","就那样"],"2分":["不太满意","不好","差","不行"],"1分":["不满意","很差","非常差","极差","恶劣"]}',
-    1, 1, '启用', 1
+    1, 1, '启用', 1,
+    2, '智能外呼', 'FLOW_STD_CALLBACK'
 );
 
 -- TPL002: 投诉处理回访
@@ -192,7 +201,8 @@ INSERT INTO `callback_template` (
     `id`, `template_id`, `template_no`, `template_name`, `template_type`, `template_type_name`,
     `tts_code`, `tts_name`, `welcome_text`, `question1_timeliness`, `question2_attitude`,
     `question3_solving`, `extra_questions`, `end_thank_text`, `transfer_human_text`,
-    `dissatisfaction_followup`, `keywords_map`, `priority`, `status`, `status_name`, `default_flag`
+    `dissatisfaction_followup`, `keywords_map`, `priority`, `status`, `status_name`, `default_flag`,
+    `interaction_mode`, `interaction_mode_name`, `dialog_flow`
 ) VALUES (
     2, 'TPL002', 'TPL002', '投诉处理回访', 2, '投诉处理回访',
     'xiaoyun', '小云',
@@ -205,7 +215,8 @@ INSERT INTO `callback_template` (
     '感谢您的坦诚反馈，我马上为您转接专人处理，请稍等。',
     '非常抱歉给您带来了不好的体验。能否请您具体说明一下，是哪些方面还需要改进？您的建议对我们非常重要。',
     '{"5分":["满意","很好","非常好","处理得当","公正"],"4分":["还行","还可以","基本满意"],"3分":["一般","还行吧","勉强"],"2分":["不太满意","处理不好","有偏见"],"1分":["不满意","很差","非常差","不公正","包庇"]}',
-    2, 1, '启用', 0
+    2, 1, '启用', 0,
+    2, '智能外呼', 'FLOW_COMPLAINT_CALLBACK'
 );
 
 -- TPL003: 重大案件回访
@@ -213,7 +224,8 @@ INSERT INTO `callback_template` (
     `id`, `template_id`, `template_no`, `template_name`, `template_type`, `template_type_name`,
     `tts_code`, `tts_name`, `welcome_text`, `question1_timeliness`, `question2_attitude`,
     `question3_solving`, `extra_questions`, `end_thank_text`, `transfer_human_text`,
-    `dissatisfaction_followup`, `keywords_map`, `priority`, `status`, `status_name`, `default_flag`
+    `dissatisfaction_followup`, `keywords_map`, `priority`, `status`, `status_name`, `default_flag`,
+    `interaction_mode`, `interaction_mode_name`, `dialog_flow`
 ) VALUES (
     3, 'TPL003', 'TPL003', '重大案件回访', 3, '重大案件回访',
     'xiaoyun', '小云',
@@ -226,5 +238,6 @@ INSERT INTO `callback_template` (
     '理解您的心情。我立即为您转接案件负责人，请您稍等，他/她会与您详细沟通。',
     '非常理解您的感受。案件办理过程中哪些环节让您存在顾虑或不满，能否详细说明一下？我们会认真对待每一条意见。',
     '{"5分":["满意","很好","非常好","专业","高效","公正"],"4分":["还行","还可以","基本满意","不错的"],"3分":["一般","还行吧","还需改进"],"2分":["不太满意","进度慢","态度不好"],"1分":["不满意","很差","非常差","不作为","渎职"]}',
-    3, 1, '启用', 0
+    3, 1, '启用', 0,
+    2, '智能外呼', 'FLOW_MAJORCASE_CALLBACK'
 );
