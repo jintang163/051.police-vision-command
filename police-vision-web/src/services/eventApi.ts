@@ -249,7 +249,15 @@ import {
   WebrtcRoomJoinDTO,
   WebrtcRoomJoinResult,
   WebrtcActiveRoom,
-  WebrtcSignalDTO
+  WebrtcSignalDTO,
+  WebrtcSignalFullDTO,
+  WebrtcSignalResult,
+  PublisherInfo,
+  PlayerInfo,
+  WebrtcRoomMediaInfo,
+  CommandReceiptDTO,
+  CommandReceiptResult,
+  PlanConfig
 } from '@/types';
 
 export const getEmergencyPlanTemplates = (): Promise<{ data: EmergencyPlanTemplate[] }> => {
@@ -337,4 +345,54 @@ export const updateWebrtcParticipantStatus = (params: {
   isHandRaised?: boolean;
 }): Promise<{ data: Record<string, any> }> => {
   return post('/api/emergency/webrtc/room/participant/status', null, params);
+};
+
+export const sendWebrtcOffer = (data: WebrtcSignalFullDTO): Promise<{ data: WebrtcSignalResult }> => {
+  return post('/api/emergency/webrtc/signal/offer', data);
+};
+
+export const sendWebrtcAnswer = (data: WebrtcSignalFullDTO): Promise<{ data: WebrtcSignalResult }> => {
+  return post('/api/emergency/webrtc/signal/answer', data);
+};
+
+export const sendWebrtcIce = (data: WebrtcSignalFullDTO): Promise<{ data: WebrtcSignalResult }> => {
+  return post('/api/emergency/webrtc/signal/ice', data);
+};
+
+export const hangUpWebrtc = (data: WebrtcSignalFullDTO): Promise<{ data: WebrtcSignalResult }> => {
+  return post('/api/emergency/webrtc/signal/hangup', data);
+};
+
+export const getWebrtcPublisherInfo = (
+  roomId: string,
+  userId: string,
+  streamType = 'main'
+): Promise<{ data: PublisherInfo }> => {
+  return get(`/api/emergency/webrtc/stream/publisher/${roomId}/${userId}`, { streamType });
+};
+
+export const getWebrtcPlayerInfo = (
+  roomId: string,
+  targetUserId: string,
+  streamType = 'main'
+): Promise<{ data: PlayerInfo }> => {
+  return get(`/api/emergency/webrtc/stream/player/${roomId}/${targetUserId}`, { streamType });
+};
+
+export const getWebrtcRoomMediaInfo = (roomId: string): Promise<{ data: WebrtcRoomMediaInfo }> => {
+  return get(`/api/emergency/webrtc/room/${roomId}/media`);
+};
+
+export const submitCommandReceipt = (data: CommandReceiptDTO): Promise<{ data: CommandReceiptResult }> => {
+  return post('/api/emergency/command/receipt', data);
+};
+
+export const batchSubmitCommandReceipts = (
+  data: CommandReceiptDTO[]
+): Promise<{ data: CommandReceiptResult[] }> => {
+  return post('/api/emergency/command/receipt/batch', data);
+};
+
+export const getPlanConfig = (templateCode: string): Promise<{ data: PlanConfig }> => {
+  return get(`/api/emergency/plan/config/${templateCode}`);
 };

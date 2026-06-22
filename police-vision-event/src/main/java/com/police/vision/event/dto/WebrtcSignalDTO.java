@@ -22,9 +22,35 @@ public class WebrtcSignalDTO {
 
     private String fromUserId;
 
+    private String fromUserName;
+
     private String toUserId;
+
+    private String toUserName;
 
     private Map<String, Object> data;
 
     private Long eventId;
+
+    private String sdp;
+
+    private String sdpType;
+
+    private String candidate;
+
+    private String sdpMid;
+
+    private Integer sdpMLineIndex;
+
+    private String transId;
+
+    private Boolean enableAudio;
+
+    private Boolean enableVideo;
+
+    private Boolean isHandRaised;
+
+    private String streamType;
+
+    private String action;
 }

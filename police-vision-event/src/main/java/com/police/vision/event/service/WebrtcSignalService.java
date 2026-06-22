@@ -31,6 +31,7 @@ public class WebrtcSignalService {
     private final MqUtil mqUtil;
     private final SecEventMapper eventMapper;
     private final EventNacosConfig nacosConfig;
+    private final MediaServerService mediaServerService;
 
     private static final String ROOM_PREFIX = "emergency:webrtc:room:";
     private static final String PARTICIPANT_PREFIX = "emergency:webrtc:participants:";
@@ -93,6 +94,13 @@ public class WebrtcSignalService {
         result.put("selfInfo", participant);
         result.put("token", generateToken(roomId, dto.getUserId()));
         result.put("signalServerUrl", getSignalServerUrl());
+        result.put("signalingMode", nacosConfig.getEnableSfu() ? "sfu" : "mesh");
+
+        Map<String, Object> mediaInfo = mediaServerService.createOrGetRoom(roomId, dto.getEventId());
+        result.put("mediaServer", mediaInfo);
+        result.put("publisherInfo", mediaServerService.getPublisherInfo(roomId, String.valueOf(dto.getUserId()), "main"));
+        result.put("playerInfo", mediaServerService.getPlayerInfo(roomId, String.valueOf(dto.getUserId()), "main"));
+        result.put("playUrlMap", buildPlayUrlMap(roomId, participants));
 
         sendRoomUpdateMq(roomId, "JOIN", participant);
         log.info("用户加入视频会商成功，房间ID：{}，用户：{}，当前人数：{}", roomId, dto.getUserName(), participants.size());
@@ -274,5 +282,151 @@ public class WebrtcSignalService {
                 RocketMQConfig.buildDestination(MqConstant.WEBRTC_SIGNAL_TOPIC, MqConstant.TAG_WEBRTC_SIGNAL),
                 message
         );
+    }
+
+    private Map<String, Map<String, Object>> buildPlayUrlMap(String roomId, Map<String, Map<String, Object>> participants) {
+        Map<String, Map<String, Object>> playUrlMap = new HashMap<>();
+        for (String userId : participants.keySet()) {
+            Map<String, Object> playerInfo = mediaServerService.getPlayerInfo(roomId, userId, "main");
+            playUrlMap.put(userId, playerInfo);
+        }
+        return playUrlMap;
+    }
+
+    public Map<String, Object> getPublisherInfo(String roomId, String userId, String streamType) {
+        String roomKey = ROOM_PREFIX + roomId;
+        if (!redisUtil.hasKey(roomKey)) {
+            throw new IllegalArgumentException("视频会商房间不存在：" + roomId);
+        }
+        return mediaServerService.getPublisherInfo(roomId, userId, streamType);
+    }
+
+    public Map<String, Object> getPlayerInfo(String roomId, String targetUserId, String streamType) {
+        String roomKey = ROOM_PREFIX + roomId;
+        if (!redisUtil.hasKey(roomKey)) {
+            throw new IllegalArgumentException("视频会商房间不存在：" + roomId);
+        }
+        return mediaServerService.getPlayerInfo(roomId, targetUserId, streamType);
+    }
+
+    public Map<String, Object> getRoomMediaInfo(String roomId) {
+        String roomKey = ROOM_PREFIX + roomId;
+        if (!redisUtil.hasKey(roomKey)) {
+            throw new IllegalArgumentException("视频会商房间不存在：" + roomId);
+        }
+        Map<String, Object> mediaInfo = new HashMap<>();
+        mediaInfo.put("mediaServer", mediaServerService.getMediaServerInfo());
+        mediaInfo.put("roomStats", mediaServerService.getRoomStats(roomId));
+        mediaInfo.put("streams", mediaServerService.listRoomStreams(roomId));
+        return mediaInfo;
+    }
+
+    public Map<String, Object> sendOffer(WebrtcSignalDTO dto) {
+        log.info("处理WebRTC Offer信令，房间：{}，发送者：{} -> 接收者：{}",
+                dto.getRoomId(), dto.getFromUserId(), dto.getToUserId());
+
+        validateRoom(dto.getRoomId());
+
+        Map<String, Object> signalMessage = buildSignalMessage(dto, "offer");
+        forwardSignal(dto.getRoomId(), dto.getToUserId(), signalMessage);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("signalType", "offer");
+        result.put("fromUserId", dto.getFromUserId());
+        result.put("toUserId", dto.getToUserId());
+        result.put("transId", UUID.randomUUID().toString());
+        result.put("timestamp", System.currentTimeMillis());
+        return result;
+    }
+
+    public Map<String, Object> sendAnswer(WebrtcSignalDTO dto) {
+        log.info("处理WebRTC Answer信令，房间：{}，发送者：{} -> 接收者：{}",
+                dto.getRoomId(), dto.getFromUserId(), dto.getToUserId());
+
+        validateRoom(dto.getRoomId());
+
+        Map<String, Object> signalMessage = buildSignalMessage(dto, "answer");
+        forwardSignal(dto.getRoomId(), dto.getToUserId(), signalMessage);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("signalType", "answer");
+        result.put("fromUserId", dto.getFromUserId());
+        result.put("toUserId", dto.getToUserId());
+        result.put("timestamp", System.currentTimeMillis());
+        return result;
+    }
+
+    public Map<String, Object> sendIceCandidate(WebrtcSignalDTO dto) {
+        log.debug("处理WebRTC ICE候选，房间：{}，发送者：{} -> 接收者：{}",
+                dto.getRoomId(), dto.getFromUserId(), dto.getToUserId());
+
+        validateRoom(dto.getRoomId());
+
+        Map<String, Object> signalMessage = buildSignalMessage(dto, "ice_candidate");
+        forwardSignal(dto.getRoomId(), dto.getToUserId(), signalMessage);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("signalType", "ice_candidate");
+        result.put("fromUserId", dto.getFromUserId());
+        result.put("toUserId", dto.getToUserId());
+        return result;
+    }
+
+    public Map<String, Object> hangUp(WebrtcSignalDTO dto) {
+        log.info("处理WebRTC挂断信令，房间：{}，用户：{}", dto.getRoomId(), dto.getFromUserId());
+
+        validateRoom(dto.getRoomId());
+
+        Map<String, Object> signalMessage = buildSignalMessage(dto, "bye");
+        forwardSignal(dto.getRoomId(), dto.getToUserId(), signalMessage);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("signalType", "bye");
+        result.put("timestamp", System.currentTimeMillis());
+        return result;
+    }
+
+    private void validateRoom(String roomId) {
+        String roomKey = ROOM_PREFIX + roomId;
+        if (!redisUtil.hasKey(roomKey)) {
+            throw new IllegalArgumentException("视频会商房间不存在或已过期：" + roomId);
+        }
+    }
+
+    private Map<String, Object> buildSignalMessage(WebrtcSignalDTO dto, String signalType) {
+        Map<String, Object> message = new HashMap<>();
+        message.put("roomId", dto.getRoomId());
+        message.put("eventId", dto.getEventId());
+        message.put("fromUserId", dto.getFromUserId());
+        message.put("fromUserName", dto.getFromUserName());
+        message.put("toUserId", dto.getToUserId());
+        message.put("toUserName", dto.getToUserName());
+        message.put("signalType", signalType);
+        message.put("data", dto.getData());
+        message.put("sdp", dto.getSdp());
+        message.put("candidate", dto.getCandidate());
+        message.put("sdpMid", dto.getSdpMid());
+        message.put("sdpMLineIndex", dto.getSdpMLineIndex());
+        message.put("timestamp", System.currentTimeMillis());
+        message.put("transId", dto.getTransId() != null ? dto.getTransId() : UUID.randomUUID().toString());
+        return message;
+    }
+
+    private void forwardSignal(String roomId, Object toUserId, Map<String, Object> signalMessage) {
+        mqUtil.sendAsync(
+                RocketMQConfig.buildDestination(MqConstant.WEBRTC_SIGNAL_TOPIC, MqConstant.TAG_WEBRTC_SIGNAL),
+                signalMessage
+        );
+        mqUtil.sendBroadcast(
+                RocketMQConfig.buildDestination(MqConstant.WEBRTC_SIGNAL_TOPIC, MqConstant.TAG_WEBRTC_SIGNAL),
+                signalMessage
+        );
+
+        log.debug("信令已转发，房间：{}，目标：{}，类型：{}",
+                roomId, toUserId, signalMessage.get("signalType"));
     }
 }

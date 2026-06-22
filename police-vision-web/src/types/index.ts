@@ -479,6 +479,12 @@ export interface EmergencyPlanStartResult {
   videoRoomUrl?: string;
   fallback?: boolean;
   message?: string;
+  templateCode?: string;
+  nacosConfigKey?: string;
+  configSource?: string;
+  planSteps?: PlanStep[];
+  requiredResources?: PlanRequiredResources;
+  commandTemplates?: any[];
 }
 
 export interface EmergencyPlanStartDTO {
@@ -559,9 +565,18 @@ export interface CommandStatusLog {
   extraData?: string;
 }
 
+export interface ValidNextStatus {
+  code: number;
+  name: string;
+  description: string;
+}
+
 export interface EmergencyCommandDetail {
   command: EmergencyCommand;
   statusLogs: CommandStatusLog[];
+  validNextStatuses: ValidNextStatus[];
+  isFinalStatus: boolean;
+  isActiveStatus: boolean;
 }
 
 export interface EmergencyResourceQueryDTO {
@@ -740,4 +755,140 @@ export interface CommandTimelineItem {
   operatorDept?: string;
   remark?: string;
   dotColor: string;
+}
+
+export interface MediaServerInfo {
+  sfuType: string;
+  sfuHost: string;
+  sfuWsPort: number;
+  sfuHttpPort: number;
+  rtcAppName: string;
+  enableSfu: boolean;
+  maxBitrateKbps: number;
+  defaultResolution: string;
+  wsSignalUrl: string;
+  httpApiUrl: string;
+}
+
+export interface PublisherInfo {
+  roomId: string;
+  userId: string;
+  streamType: string;
+  streamKey: string;
+  publishUrl: string;
+  webrtcPublishUrl: string;
+  srtUrl: string;
+  bitrateKbps: number;
+  resolution: string;
+  sfuType: string;
+  enableSfu: boolean;
+}
+
+export interface PlayerInfo {
+  roomId: string;
+  userId: string;
+  streamType: string;
+  streamKey: string;
+  webrtcPlayUrl: string;
+  httpFlvPlayUrl: string;
+  wsFlvPlayUrl: string;
+  hlsPlayUrl: string;
+  rtmpPlayUrl: string;
+  sfuType: string;
+  enableSfu: boolean;
+}
+
+export interface WebrtcRoomMediaInfo {
+  mediaServer: MediaServerInfo;
+  roomStats: Record<string, any>;
+  streams: any[];
+}
+
+export interface WebrtcSignalFullDTO {
+  roomId: string;
+  userId: string;
+  userName?: string;
+  signalType: 'offer' | 'answer' | 'ice_candidate' | 'bye';
+  fromUserId?: string;
+  fromUserName?: string;
+  toUserId?: string;
+  toUserName?: string;
+  data?: Record<string, any>;
+  eventId?: string;
+  sdp?: string;
+  sdpType?: 'offer' | 'answer';
+  candidate?: string;
+  sdpMid?: string;
+  sdpMLineIndex?: number;
+  transId?: string;
+  enableAudio?: boolean;
+  enableVideo?: boolean;
+  isHandRaised?: boolean;
+  streamType?: string;
+  action?: string;
+}
+
+export interface WebrtcSignalResult {
+  success: boolean;
+  signalType: string;
+  fromUserId: string;
+  toUserId: string;
+  transId?: string;
+  timestamp: number;
+}
+
+export interface CommandReceiptDTO {
+  commandId: string;
+  commandNo?: string;
+  receiptType: 'RECEIVE' | 'EXECUTE' | 'FEEDBACK' | 'COMPLETE' | 'TIMEOUT' | 'CANCEL';
+  operatorId?: string;
+  operatorName?: string;
+  operatorDept?: string;
+  deviceId?: string;
+  appVersion?: string;
+  feedbackContent?: string;
+  feedbackAttachments?: string[];
+  lng?: number;
+  lat?: number;
+  locationDesc?: string;
+  timestamp?: number;
+  extraData?: string;
+}
+
+export interface CommandReceiptResult {
+  commandId: string;
+  commandNo: string;
+  receiptType: string;
+  processed: boolean;
+  processTime: number;
+  oldStatus?: number;
+  newStatus?: number;
+  success?: boolean;
+  skipped?: boolean;
+  reason?: string;
+  warning?: string;
+}
+
+export interface PlanStep {
+  stepNo: number;
+  stepName: string;
+  description: string;
+  responsibleDept: string;
+  deadlineMinutes: number;
+  required: boolean;
+}
+
+export interface PlanRequiredResources {
+  policeCount: number;
+  cameraCount: number;
+  supplyTypes?: string[];
+  specialEquipments?: string[];
+  radiusMeters: number;
+}
+
+export interface PlanConfig {
+  templateCode: string;
+  steps: PlanStep[];
+  requiredResources: PlanRequiredResources;
+  commandTemplates: any[];
 }

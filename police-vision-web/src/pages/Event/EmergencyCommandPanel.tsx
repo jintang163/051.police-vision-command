@@ -26,7 +26,8 @@ import {
   Spin,
   message,
   Descriptions,
-  Badge
+  Badge,
+  Alert
 } from 'antd';
 import {
   ThunderboltOutlined,
@@ -49,7 +50,8 @@ import {
   ReloadOutlined,
   SettingOutlined,
   PhoneOutlined,
-  RiseOutlined
+  RiseOutlined,
+  CloseCircleOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
@@ -282,6 +284,19 @@ const EmergencyCommandPanel: React.FC<EmergencyCommandPanelProps> = ({
       }
     });
     return items;
+  };
+
+  const getStatusButtonConfig = (statusCode: number): { label: string; icon: React.ReactNode } => {
+    const map: Record<number, { label: string; icon: React.ReactNode }> = {
+      1: { label: '重新下达', icon: <SendOutlined /> },
+      2: { label: '标记接收', icon: <InfoCircleOutlined /> },
+      3: { label: '开始执行', icon: <PlayCircleOutlined /> },
+      4: { label: '反馈结果', icon: <RobotOutlined /> },
+      5: { label: '闭环完成', icon: <CheckCircleOutlined /> },
+      6: { label: '取消指令', icon: <CloseCircleOutlined /> },
+      7: { label: '标记超时', icon: <ClockCircleOutlined /> }
+    };
+    return map[statusCode] || { label: `状态${statusCode}`, icon: <SettingOutlined /> };
   };
 
   const overviewStats = (
@@ -956,64 +971,67 @@ const EmergencyCommandPanel: React.FC<EmergencyCommandPanelProps> = ({
             <Divider style={{ borderColor: '#1f2940', margin: '16px 0' }} />
 
             <Space wrap>
-              {selectedCommand.command.status < 5 && (
-                <>
-                  {selectedCommand.command.status < 2 && (
-                    <Button
-                      type="primary"
-                      size="small"
-                      icon={<InfoCircleOutlined />}
-                      onClick={() => handleCommandFeedback(selectedCommand.command.id, 2)}
-                    >
-                      标记已接收
-                    </Button>
-                  )}
-                  {selectedCommand.command.status >= 2 && selectedCommand.command.status < 3 && (
-                    <Button
-                      type="primary"
-                      size="small"
-                      icon={<PlayCircleOutlined />}
-                      onClick={() => handleCommandFeedback(selectedCommand.command.id, 3)}
-                    >
-                      开始执行
-                    </Button>
-                  )}
-                  {selectedCommand.command.status >= 3 && selectedCommand.command.status < 4 && (
-                    <Button
-                      size="small"
-                      icon={<RobotOutlined />}
-                      onClick={() => handleCommandFeedback(selectedCommand.command.id, 4)}
-                    >
-                      反馈结果
-                    </Button>
-                  )}
-                  {selectedCommand.command.status >= 4 && selectedCommand.command.status < 5 && (
-                    <Popconfirm
-                      title="确认指令执行完毕并关闭闭环？"
-                      onConfirm={() => handleCommandFeedback(selectedCommand.command.id, 5)}
-                      okText="确认"
-                      cancelText="取消"
-                    >
-                      <Button
-                        type="primary"
-                        size="small"
-                        style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                        icon={<CheckCircleOutlined />}
+              {selectedCommand.validNextStatuses && selectedCommand.validNextStatuses.length > 0 ? (
+                selectedCommand.validNextStatuses.map((ns) => {
+                  const btnConfig = getStatusButtonConfig(ns.code);
+                  const isPrimary = ns.code === 3 || ns.code === 5 || ns.code === 2;
+                  const isDanger = ns.code === 6;
+                  if (ns.code === 4 || ns.code === 5) {
+                    return (
+                      <Popconfirm
+                        key={ns.code}
+                        title={`确认${ns.description}？`}
+                        description={ns.name}
+                        onConfirm={() => handleCommandFeedback(selectedCommand.command.id, ns.code)}
+                        okText="确认"
+                        cancelText="取消"
                       >
-                        闭环完成
-                      </Button>
-                    </Popconfirm>
-                  )}
-                </>
+                        <Button
+                          size="small"
+                          type={isPrimary ? 'primary' : 'default'}
+                          danger={isDanger}
+                          icon={btnConfig.icon}
+                          style={ns.code === 5 ? { background: '#52c41a', borderColor: '#52c41a' } : undefined}
+                        >
+                          {btnConfig.label}
+                        </Button>
+                      </Popconfirm>
+                    );
+                  }
+                  return (
+                    <Button
+                      key={ns.code}
+                      size="small"
+                      type={isPrimary ? 'primary' : 'default'}
+                      danger={isDanger}
+                      icon={btnConfig.icon}
+                      onClick={() => handleCommandFeedback(selectedCommand.command.id, ns.code)}
+                    >
+                      {btnConfig.label}
+                    </Button>
+                  );
+                })
+              ) : (
+                <Tag color="default">当前为终态，不可操作</Tag>
               )}
               <Button
                 size="small"
-                icon={<SettingOutlined />}
-                onClick={() => fetchCommands()}
+                icon={<ReloadOutlined />}
+                onClick={() => handleViewCommandDetail({ id: selectedCommand.command.id } as EmergencyCommand)}
               >
                 刷新
               </Button>
             </Space>
+
+            {selectedCommand.isFinalStatus && (
+              <Alert
+                style={{ marginTop: 12 }}
+                type="info"
+                showIcon
+                message="指令已结束"
+                description={selectedCommand.command.status === 5 ? '指令已正常闭环完成' : '指令已取消或超时终止'}
+              />
+            )}
           </div>
         )}
       </Drawer>

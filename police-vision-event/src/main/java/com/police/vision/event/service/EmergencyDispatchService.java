@@ -25,6 +25,7 @@ import com.police.vision.event.enums.EmergencyPlanTemplateEnum;
 import com.police.vision.event.feign.GisFeignClient;
 import com.police.vision.event.mapper.*;
 import com.police.vision.event.util.GeoUtil;
+import com.police.vision.event.util.CommandStateMachine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.locationtech.jts.geom.Polygon;
@@ -55,6 +56,8 @@ public class EmergencyDispatchService {
     private final GisFeignClient gisFeignClient;
     private final MqUtil mqUtil;
     private final EventNacosConfig nacosConfig;
+    private final EmergencyPlanConfigService planConfigService;
+    private final PolicePushService policePushService;
 
     @Value("${emergency.plan.nacos.prefix:EMERGENCY_PLAN}")
     private String nacosPlanPrefix;
@@ -98,6 +101,14 @@ public class EmergencyDispatchService {
         result.put("eventId", event.getId());
         result.put("eventName", event.getEventName());
         result.put("startTime", LocalDateTime.now());
+        result.put("templateCode", plan.getPlanTemplateCode());
+        result.put("nacosConfigKey", plan.getNacosConfigKey());
+        result.put("configSource", "nacos");
+
+        Map<String, Object> planConfig = planConfigService.getPlanTemplateConfig(plan.getPlanTemplateCode());
+        result.put("planSteps", planConfig.get("steps"));
+        result.put("requiredResources", planConfig.get("requiredResources"));
+        result.put("commandTemplates", planConfig.get("commandTemplates"));
 
         int policeCount = 0;
         int cameraCount = 0;
@@ -184,6 +195,13 @@ public class EmergencyDispatchService {
 
         sendCommandMq(command, MqConstant.TAG_COMMAND_DISPATCH);
 
+        try {
+            Map<String, Object> pushResult = policePushService.pushCommandToPolice(command);
+            log.info("指令警务端推送结果，指令ID：{}，成功通道：{}", command.getId(), pushResult.get("successChannels"));
+        } catch (Exception e) {
+            log.error("指令警务端推送异常，但指令已下达，指令ID：{}", command.getId(), e);
+        }
+
         log.info("下达应急指令成功，指令ID：{}，指令编号：{}", command.getId(), command.getCommandNo());
         return command;
     }
@@ -204,6 +222,18 @@ public class EmergencyDispatchService {
 
         Integer oldStatus = command.getStatus();
         Integer newStatus = dto.getToStatus() != null ? dto.getToStatus() : CommandStatusEnum.FEEDBACK.getCode();
+
+        if (oldStatus.equals(newStatus)) {
+            log.warn("指令状态未变化，跳过更新，指令ID：{}，状态：{}", dto.getCommandId(), newStatus);
+            return command;
+        }
+
+        try {
+            CommandStateMachine.validateTransition(oldStatus, newStatus, command.getCommandNo());
+        } catch (IllegalStateException e) {
+            log.error("指令状态流转校验失败，指令ID：{}，{}", dto.getCommandId(), e.getMessage());
+            throw new BusinessException(ResultCode.PARAM_ERROR, e.getMessage());
+        }
 
         LocalDateTime now = LocalDateTime.now();
         switch (CommandStatusEnum.getByCode(newStatus)) {
@@ -299,6 +329,9 @@ public class EmergencyDispatchService {
         logWrapper.orderByAsc(SecCommandStatusLog::getOperateTime);
         List<SecCommandStatusLog> statusLogs = statusLogMapper.selectList(logWrapper);
         result.put("statusLogs", statusLogs);
+        result.put("validNextStatuses", CommandStateMachine.getValidNextStatusesWithInfo(command.getStatus()));
+        result.put("isFinalStatus", CommandStateMachine.isFinalStatus(command.getStatus()));
+        result.put("isActiveStatus", CommandStateMachine.isActiveStatus(command.getStatus()));
 
         return result;
     }
@@ -335,7 +368,7 @@ public class EmergencyDispatchService {
             result.put("cameraCount", cameraList.size());
         }
         if (resourceType == null || "supply".equals(resourceType)) {
-            List<SecEmergencySupply> supplyList = queryNearbySupplies(event.getId(), lng, lat, radius);
+            List<SecEmergencySupply> supplyList = queryNearbySupplies(event, lng, lat, radius);
             result.put("supplyList", supplyList);
             result.put("supplyCount", supplyList.size());
         }
@@ -411,7 +444,7 @@ public class EmergencyDispatchService {
         }
 
         try {
-            List<SecEmergencySupply> supplies = initDefaultSupplies(event, lng, lat, radius);
+            List<SecEmergencySupply> supplies = loadOrInitSupplies(event, lng, lat, radius);
             result.put("supplyCount", supplies.size());
         } catch (Exception e) {
             log.error("分配物资资源失败，事件ID：{}", event.getId(), e);
@@ -459,6 +492,8 @@ public class EmergencyDispatchService {
                     item.put("name", p.getName());
                     item.put("policeNo", p.getPoliceNo());
                     item.put("dept", p.getDeptName());
+                    item.put("deptId", p.getDeptId());
+                    item.put("rankLevel", p.getRankLevel());
                     item.put("status", p.getStatus());
                     item.put("lng", p.getLongitude());
                     item.put("lat", p.getLatitude());
@@ -469,7 +504,8 @@ public class EmergencyDispatchService {
                     item.put("distanceMeters", Math.round(distance));
                     return item;
                 })
-                .sorted(Comparator.comparingDouble(m -> (Double) m.get("distanceMeters")))
+                .filter(m -> (Long) m.get("distanceMeters") <= radiusKm * 1000)
+                .sorted(Comparator.comparingLong(m -> (Long) m.get("distanceMeters")))
                 .collect(Collectors.toList());
     }
 
@@ -503,24 +539,38 @@ public class EmergencyDispatchService {
                 .collect(Collectors.toList());
     }
 
-    private List<SecEmergencySupply> queryNearbySupplies(Long eventId, double lng, double lat, double radiusMeters) {
-        LambdaQueryWrapper<SecEmergencySupply> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SecEmergencySupply::getEventId, eventId);
-        List<SecEmergencySupply> list = supplyMapper.selectList(wrapper);
-
-        if (list == null || list.isEmpty()) {
+    private List<SecEmergencySupply> queryNearbySupplies(SecEvent event, double lng, double lat, double radiusMeters) {
+        List<SecEmergencySupply> allSupplies = loadOrInitSupplies(event, lng, lat, radiusMeters);
+        if (allSupplies == null || allSupplies.isEmpty()) {
             return Collections.emptyList();
         }
-
-        return list.stream()
-                .filter(s -> s.getLng() != null && s.getLat() != null)
-                .peek(s -> {
-                    double distance = GeoUtil.haversineDistance(lng, lat, s.getLng(), s.getLat());
-                    s.setDistanceMeters(distance);
-                })
-                .filter(s -> s.getDistanceMeters() <= radiusMeters)
+        return allSupplies.stream()
+                .filter(s -> s.getLng() != null && s.getLat() != null && s.getStatus() == 1)
+                .filter(s -> s.getDistanceMeters() != null && s.getDistanceMeters() <= radiusMeters)
                 .sorted(Comparator.comparingDouble(SecEmergencySupply::getDistanceMeters))
                 .collect(Collectors.toList());
+    }
+
+    private List<SecEmergencySupply> loadOrInitSupplies(SecEvent event, double lng, double lat, double radius) {
+        LambdaQueryWrapper<SecEmergencySupply> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(SecEmergencySupply::getEventId, event.getId());
+        queryWrapper.eq(SecEmergencySupply::getStatus, 1);
+        queryWrapper.orderByAsc(SecEmergencySupply::getSupplyType);
+        List<SecEmergencySupply> existing = supplyMapper.selectList(queryWrapper);
+
+        if (existing != null && !existing.isEmpty()) {
+            log.info("从数据库加载应急物资，事件ID：{}，数量：{}", event.getId(), existing.size());
+            existing.forEach(s -> {
+                if (s.getLng() != null && s.getLat() != null) {
+                    double distance = GeoUtil.haversineDistance(lng, lat, s.getLng(), s.getLat());
+                    s.setDistanceMeters(distance);
+                }
+            });
+            return existing;
+        }
+
+        log.info("数据库无物资记录，执行默认初始化，事件ID：{}", event.getId());
+        return initDefaultSupplies(event, lng, lat, radius);
     }
 
     private List<SecEmergencySupply> initDefaultSupplies(SecEvent event, double lng, double lat, double radius) {

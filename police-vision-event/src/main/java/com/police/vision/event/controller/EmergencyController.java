@@ -2,12 +2,14 @@ package com.police.vision.event.controller;
 
 import com.police.vision.common.entity.PageResult;
 import com.police.vision.common.result.Result;
+import com.police.vision.event.dto.CommandReceiptDTO;
 import com.police.vision.event.dto.EmergencyCommandCreateDTO;
 import com.police.vision.event.dto.EmergencyCommandFeedbackDTO;
 import com.police.vision.event.dto.EmergencyPlanStartDTO;
 import com.police.vision.event.dto.EmergencyResourceQueryDTO;
 import com.police.vision.event.entity.SecEmergencyCommand;
 import com.police.vision.event.service.EmergencyDispatchService;
+import com.police.vision.event.service.PolicePushService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,6 +29,7 @@ import java.util.Map;
 public class EmergencyController {
 
     private final EmergencyDispatchService dispatchService;
+    private final PolicePushService policePushService;
 
     @Operation(summary = "获取应急预案模板列表", description = "返回预设的暴恐、劫持、火灾等场景预案模板")
     @GetMapping("/plan/templates")
@@ -75,5 +78,28 @@ public class EmergencyController {
     @PostMapping("/resources/query")
     public Result<Map<String, Object>> queryEmergencyResources(@RequestBody @Valid EmergencyResourceQueryDTO dto) {
         return Result.success(dispatchService.queryEmergencyResources(dto));
+    }
+
+    @Operation(summary = "警务端指令回执", description = "警务App上报指令接收/执行/反馈/完成状态，驱动状态机流转")
+    @PostMapping("/command/receipt")
+    public Result<Map<String, Object>> commandReceipt(@RequestBody @Valid CommandReceiptDTO receipt) {
+        return Result.success(policePushService.processCommandReceipt(receipt));
+    }
+
+    @Operation(summary = "警务端指令批量回执", description = "批量上报多条指令的状态回执")
+    @PostMapping("/command/receipt/batch")
+    public Result<Map<String, Object>> batchCommandReceipt(@RequestBody List<CommandReceiptDTO> receipts) {
+        int success = 0;
+        int failed = 0;
+        for (CommandReceiptDTO receipt : receipts) {
+            try {
+                policePushService.processCommandReceipt(receipt);
+                success++;
+            } catch (Exception e) {
+                log.error("批量回执处理失败，指令ID：{}", receipt.getCommandId(), e);
+                failed++;
+            }
+        }
+        return Result.success(Map.of("total", receipts.size(), "success", success, "failed", failed));
     }
 }

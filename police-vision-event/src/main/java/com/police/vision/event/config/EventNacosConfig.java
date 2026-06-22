@@ -54,4 +54,40 @@ public class EventNacosConfig {
 
     @Value("${emergency.sentinel.command-dispatch-qps:50}")
     private Integer sentinelCommandDispatchQps;
+
+    @Value("${emergency.media.sfu-type:srs}")
+    private String sfuType;
+
+    @Value("${emergency.media.sfu-host:127.0.0.1}")
+    private String sfuHost;
+
+    @Value("${emergency.media.sfu-ws-port:8888}")
+    private Integer sfuWsPort;
+
+    @Value("${emergency.media.sfu-http-port:1985}")
+    private Integer sfuHttpPort;
+
+    @Value("${emergency.media.sfu-api-secret:}")
+    private String sfuApiSecret;
+
+    @Value("${emergency.media.rtc-app:live}")
+    private String rtcAppName;
+
+    @Value("${emergency.media.enable-sfu:false}")
+    private Boolean enableSfu;
+
+    @Value("${emergency.media.max-bitrate-kbps:2048}")
+    private Integer maxBitrateKbps;
+
+    @Value("${emergency.media.resolution:720p}")
+    private String defaultResolution;
+
+    @Value("${emergency.push.enabled:true}")
+    private Boolean pushEnabled;
+
+    @Value("${emergency.push.retry-times:3}")
+    private Integer pushRetryTimes;
+
+    @Value("${emergency.push.channel:mq,app,sms}")
+    private String pushChannels;
 }
