@@ -24,12 +24,14 @@ import com.police.vision.control.dto.intelligence.ReportGenerateDTO;
 import com.police.vision.control.entity.AggregationAlert;
 import com.police.vision.control.entity.TargetPerson;
 import com.police.vision.control.entity.intelligence.CaseCluster;
+import com.police.vision.control.entity.intelligence.PoliceCaseInfo;
 import com.police.vision.control.entity.intelligence.HotspotPrediction;
 import com.police.vision.control.entity.intelligence.IntelligenceProduct;
 import com.police.vision.control.entity.intelligence.PublicOpinion;
 import com.police.vision.control.mapper.AggregationAlertMapper;
 import com.police.vision.control.mapper.TargetPersonMapper;
 import com.police.vision.control.mapper.intelligence.CaseClusterMapper;
+import com.police.vision.control.mapper.intelligence.PoliceCaseInfoMapper;
 import com.police.vision.control.mapper.intelligence.HotspotPredictionMapper;
 import com.police.vision.control.mapper.intelligence.IntelligenceProductMapper;
 import com.police.vision.control.mapper.intelligence.PublicOpinionMapper;
@@ -77,6 +79,7 @@ public class IntelligenceProductService {
     private final PublicOpinionMapper publicOpinionMapper;
     private final HotspotPredictionMapper hotspotPredictionMapper;
     private final CaseClusterMapper caseClusterMapper;
+    private final PoliceCaseInfoMapper policeCaseInfoMapper;
 
     private static final Map<String, String> PRODUCT_TYPE_NAME_MAP = new LinkedHashMap<>();
     private static final int PRODUCT_NO_SEQUENCE_BOUND = 10000;
@@ -113,11 +116,9 @@ public class IntelligenceProductService {
         Integer vehicleCount = extractCount(multiSourceData, "vehicleCount");
         Integer opinionCount = extractCount(multiSourceData, "opinionCount");
 
-        com.police.vision.control.dto.ReportGenerateDTO deepSeekDto =
-                buildDeepSeekDto(dto);
         String markdownReport = null;
         try {
-            markdownReport = deepSeekService.generateReport(deepSeekDto, multiSourceData);
+            markdownReport = deepSeekService.generateReport(dto, multiSourceData);
         } catch (Exception e) {
             log.warn("DeepSeek生成报告异常，使用降级报告模板", e);
         }
@@ -246,10 +247,9 @@ public class IntelligenceProductService {
         Integer vehicleCount = extractCount(multiSourceData, "vehicleCount");
         Integer opinionCount = extractCount(multiSourceData, "opinionCount");
 
-        com.police.vision.control.dto.ReportGenerateDTO deepSeekDto = buildDeepSeekDto(dto);
         String markdownReport = null;
         try {
-            markdownReport = deepSeekService.generateReport(deepSeekDto, multiSourceData);
+            markdownReport = deepSeekService.generateReport(dto, multiSourceData);
         } catch (Exception e) {
             log.warn("DeepSeek重新生成报告异常，使用降级报告模板", e);
         }
@@ -467,6 +467,15 @@ public class IntelligenceProductService {
         Map<String, Integer> typeDistribution = new LinkedHashMap<>();
         double solveRate = 0.0;
         try {
+            count = policeCaseInfoMapper.countByTimeRange(startTime, endTime, null, areaCode);
+            List<Map<String, Object>> dist = policeCaseInfoMapper.selectCaseTypeDistribution(startTime, endTime, null, areaCode);
+            for (Map<String, Object> row : dist) {
+                typeDistribution.put(String.valueOf(row.get("case_type")), ((Number) row.get("cnt")).intValue());
+            }
+            int totalSolved = policeCaseInfoMapper.countSolvedByTimeRange(startTime, endTime, null, areaCode);
+            if (totalSolved > 0 && count > 0) {
+                solveRate = (double) totalSolved / count;
+            }
             if (elasticsearchClient != null) {
                 try {
                     Query rangeQuery = Query.of(q -> q.range(r -> r
@@ -488,42 +497,34 @@ public class IntelligenceProductService {
                             }))
                     );
                     CountResponse countResp = elasticsearchClient.count(countReq);
-                    count = (int) countResp.count();
-
-                    SearchRequest aggReq = SearchRequest.of(sr -> sr
-                            .index("police_case")
-                            .size(0)
-                            .query(q -> q.bool(b -> {
-                                b.must(rangeQuery);
-                                if (finalAreaQuery != null) b.must(finalAreaQuery);
-                                return b;
-                            }))
-                            .aggregations("caseTypeAgg", a -> a.terms(TermsAggregation.of(t -> t.field("case_type").size(20))))
-                    );
-                    SearchResponse<Void> aggResp = elasticsearchClient.search(aggReq, Void.class);
-                    if (aggResp.aggregations() != null && aggResp.aggregations().get("caseTypeAgg") != null) {
-                        var buckets = aggResp.aggregations().get("caseTypeAgg").sterms().buckets().array();
-                        for (var bucket : buckets) {
-                            typeDistribution.put(bucket.key().stringValue(), (int) bucket.docCount());
+                    int esCount = (int) countResp.count();
+                    if (esCount > 0) {
+                        count = esCount;
+                        SearchRequest aggReq = SearchRequest.of(sr -> sr
+                                .index("police_case")
+                                .size(0)
+                                .query(q -> q.bool(b -> {
+                                    b.must(rangeQuery);
+                                    if (finalAreaQuery != null) b.must(finalAreaQuery);
+                                    return b;
+                                }))
+                                .aggregations("caseTypeAgg", a -> a.terms(TermsAggregation.of(t -> t.field("case_type").size(20))))
+                        );
+                        SearchResponse<Void> aggResp = elasticsearchClient.search(aggReq, Void.class);
+                        if (aggResp.aggregations() != null && aggResp.aggregations().get("caseTypeAgg") != null) {
+                            var buckets = aggResp.aggregations().get("caseTypeAgg").sterms().buckets().array();
+                            Map<String, Integer> esDist = new LinkedHashMap<>();
+                            for (var bucket : buckets) {
+                                esDist.put(bucket.key().stringValue(), (int) bucket.docCount());
+                            }
+                            if (!esDist.isEmpty()) {
+                                typeDistribution = esDist;
+                            }
                         }
                     }
                 } catch (Exception e) {
-                    log.warn("ES查询案件数据失败，降级到DB: {}", e.getMessage());
+                    log.warn("ES查询案件数据失败，已使用DB数据: {}", e.getMessage());
                 }
-            }
-            if (count == 0 && typeDistribution.isEmpty()) {
-                try {
-                    Map<String, Object> dbResult = queryCaseFromDbFallback(startTime, endTime, areaCode);
-                    count = (int) dbResult.getOrDefault("count", 0);
-                    @SuppressWarnings("unchecked")
-                    Map<String, Integer> dist = (Map<String, Integer>) dbResult.get("typeDistribution");
-                    if (dist != null) typeDistribution.putAll(dist);
-                } catch (Exception e2) {
-                    log.warn("DB查询案件也失败", e2);
-                }
-            }
-            if (count > 0) {
-                solveRate = 0.35 + new Random().nextDouble() * 0.3;
             }
         } catch (Exception e) {
             log.warn("采集案件数据失败", e);
@@ -535,8 +536,14 @@ public class IntelligenceProductService {
 
     private Map<String, Object> queryCaseFromDbFallback(LocalDateTime startTime, LocalDateTime endTime, String areaCode) {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("count", 0);
-        result.put("typeDistribution", new LinkedHashMap<String, Integer>());
+        int count = policeCaseInfoMapper.countByTimeRange(startTime, endTime, null, areaCode);
+        List<Map<String, Object>> dist = policeCaseInfoMapper.selectCaseTypeDistribution(startTime, endTime, null, areaCode);
+        Map<String, Integer> typeDistribution = new LinkedHashMap<>();
+        for (Map<String, Object> row : dist) {
+            typeDistribution.put(String.valueOf(row.get("case_type")), ((Number) row.get("cnt")).intValue());
+        }
+        result.put("count", count);
+        result.put("typeDistribution", typeDistribution);
         return result;
     }
 
@@ -587,11 +594,22 @@ public class IntelligenceProductService {
         int alertCount = 0;
         Map<String, Integer> alertDistribution = new LinkedHashMap<>();
         try {
-            monitorCount = 20 + new Random().nextInt(100);
-            alertCount = 5 + new Random().nextInt(50);
-            alertDistribution.put("套牌嫌疑", new Random().nextInt(10));
-            alertDistribution.put("超速", new Random().nextInt(20));
-            alertDistribution.put("异常停留", new Random().nextInt(10));
+            LambdaQueryWrapper<AggregationAlert> wrapper = new LambdaQueryWrapper<>();
+            wrapper.between(AggregationAlert::getStartTime, startTime, endTime);
+            if (StringUtils.hasText(areaCode)) {
+                wrapper.eq(AggregationAlert::getAreaCode, areaCode);
+            }
+            List<AggregationAlert> alerts = aggregationAlertMapper.selectList(wrapper);
+            monitorCount = alerts != null ? alerts.size() : 0;
+            if (alerts != null) {
+                for (AggregationAlert a : alerts) {
+                    if (a.getAlertLevel() != null && a.getAlertLevel() >= 3) {
+                        alertCount++;
+                    }
+                    String level = a.getAlertLevel() != null ? "L" + a.getAlertLevel() : "未知";
+                    alertDistribution.merge(level, 1, Integer::sum);
+                }
+            }
         } catch (Exception e) {
             log.warn("采集车辆布控数据失败", e);
         }
@@ -726,19 +744,6 @@ public class IntelligenceProductService {
             log.warn("采集串并案数据失败", e);
         }
         data.put("caseClusters", newClusters);
-    }
-
-    private com.police.vision.control.dto.ReportGenerateDTO buildDeepSeekDto(ReportGenerateDTO dto) {
-        com.police.vision.control.dto.ReportGenerateDTO deepSeekDto =
-                new com.police.vision.control.dto.ReportGenerateDTO();
-        String productType = dto.getProductType();
-        String reportName = PRODUCT_TYPE_NAME_MAP.getOrDefault(productType, "治安态势分析报告");
-        if (dto.getReportStartDate() != null && dto.getReportEndDate() != null) {
-            reportName = String.format("%s(%s至%s)", reportName, dto.getReportStartDate(), dto.getReportEndDate());
-        }
-        deepSeekDto.setReportName(reportName);
-        deepSeekDto.setEventId(SnowflakeIdUtil.nextId());
-        return deepSeekDto;
     }
 
     private Integer extractCount(Map<String, Object> data, String key) {

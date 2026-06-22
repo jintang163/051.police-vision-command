@@ -329,7 +329,7 @@ INSERT IGNORE INTO analysis_model (
     1, 0, '空闲', 1, NOW(), NOW(), 0);
 
 -- ---------------------------------------------------------------------------
--- 8. 预置数据：2个示例爬虫任务
+-- 8. 预置数据：3个社媒站点爬虫任务
 -- ---------------------------------------------------------------------------
 INSERT IGNORE INTO crawler_task (
     id, task_id, task_no, task_name, site_name, site_url,
@@ -339,24 +339,83 @@ INSERT IGNORE INTO crawler_task (
     enabled, task_status, task_status_name, cron_expression,
     create_time, update_time, deleted
 ) VALUES
-(1, 'CRAWLER-LOCAL-FORUM', 'C001', '本地论坛舆情爬虫', '本地生活论坛', 'https://bbs.local-example.com',
-    'https://bbs.local-example.com/forum-1-1.html,https://bbs.local-example.com/forum-2-1.html,https://bbs.local-example.com/forum-3-1.html',
-    'bbs.local-example.com',
-    '/thread-\\d+-1-1\\.html',
-    'div.t_fsz, div.post_content', 'h1.ts, span#thread_subject', 'a.xw1, .authi a', 'span.time-show, em[id*=authorposton]',
-    '警情,事故,纠纷,投诉,城管,拆迁,维权,举报,污染,噪音',
-    '本市',
+(1, 'CRAWLER-WEIBO-LOCAL', 'C001', '微博本地舆情爬虫', '微博本地', 'https://weibo.com',
+    'https://s.weibo.com/weibo?q=本地新闻&region=custom:11',
+    'weibo.com',
+    's.weibo.com/weibo',
+    '.txt', '.txt', '.name a', '.from a',
+    '警情,事故,纠纷,投诉,维权,举报,治安,犯罪',
+    '本地',
     3, 5, 1000,
     1, 0, '空闲', '0 0 */2 * * ?',
     NOW(), NOW(), 0),
 
-(2, 'CRAWLER-LOCAL-NEWS', 'C002', '本地新闻舆情爬虫', '本地新闻门户', 'https://news.local-example.com',
-    'https://news.local-example.com/local/,https://news.local-example.com/society/,https://news.local-example.com/politics/',
-    'news.local-example.com',
-    '/\\d{8}/\\d+\\.shtml',
-    'div.article-content, div#content', 'h1.article-title, div.title h1', 'span.source, .article-author', 'span.publish-time, .pubtime',
+(2, 'CRAWLER-TOUTIAO-LOCAL', 'C002', '今日头条本地舆情爬虫', '今日头条本地', 'https://www.toutiao.com',
+    'https://www.toutiao.com/search/?keyword=本地治安',
+    'toutiao.com',
+    'www.toutiao.com/article',
+    '.article-content', '.article-title', '.source', '.time',
     '警方,公安,派出所,案件,事故,违法,犯罪,查处,通报,警情',
     '本市',
     3, 5, 1500,
     1, 0, '空闲', '0 30 */2 * * ?',
+    NOW(), NOW(), 0),
+
+(3, 'CRAWLER-TIEBA-LOCAL', 'C003', '百度贴吧本地吧舆情爬虫', '百度贴吧本地吧', 'https://tieba.baidu.com',
+    'https://tieba.baidu.com/f?kw=本地吧',
+    'tieba.baidu.com',
+    'tieba.baidu.com/p/',
+    '.p_content', '.core_title_txt', '.d_name a', '.tail-info',
+    '警情,事故,纠纷,投诉,维权,举报,治安,犯罪',
+    '本地',
+    3, 5, 1000,
+    1, 0, '空闲', '0 0 */3 * * ?',
     NOW(), NOW(), 0);
+
+-- ---------------------------------------------------------------------------
+-- 7. police_case_info（案件信息统一数据源表）
+-- ---------------------------------------------------------------------------
+DROP TABLE IF EXISTS police_case_info;
+CREATE TABLE police_case_info (
+    id                      BIGINT          NOT NULL COMMENT '主键ID(雪花算法)',
+    case_id                 VARCHAR(64)     NOT NULL COMMENT '案件唯一ID',
+    case_no                 VARCHAR(64)     DEFAULT NULL COMMENT '案件编号',
+    case_type               VARCHAR(64)     DEFAULT NULL COMMENT '案件类型编码(01-盗窃/02-抢劫/03-抢夺/04-诈骗/05-故意伤害/06-故意杀人/07-强奸/08-绑架/09-贩毒/10-交通肇事/11-寻衅滋事/12-聚众斗殴)',
+    case_type_name          VARCHAR(128)    DEFAULT NULL COMMENT '案件类型名称',
+    case_sub_type           VARCHAR(64)     DEFAULT NULL COMMENT '案件子类型',
+    case_level              VARCHAR(16)     DEFAULT NULL COMMENT '案件等级',
+    case_level_name         VARCHAR(64)     DEFAULT NULL COMMENT '案件等级名称',
+    modus_operandi          TEXT            DEFAULT NULL COMMENT '作案手法描述',
+    case_keywords           VARCHAR(500)    DEFAULT NULL COMMENT '案件关键词(逗号分隔)',
+    area_code               VARCHAR(32)     DEFAULT NULL COMMENT '案发区域编码',
+    area_name               VARCHAR(128)    DEFAULT NULL COMMENT '案发区域名称',
+    longitude               DECIMAL(12,8)   DEFAULT NULL COMMENT '案发经度',
+    latitude                DECIMAL(12,8)   DEFAULT NULL COMMENT '案发纬度',
+    address                 VARCHAR(500)    DEFAULT NULL COMMENT '案发地址',
+    case_time               DATETIME        DEFAULT NULL COMMENT '案发时间',
+    weapon_type             VARCHAR(64)     DEFAULT NULL COMMENT '作案工具类型',
+    target_type             VARCHAR(64)     DEFAULT NULL COMMENT '侵害目标类型',
+    suspect_ids             TEXT            DEFAULT NULL COMMENT '嫌疑人ID(逗号分隔)',
+    suspect_names           TEXT            DEFAULT NULL COMMENT '嫌疑人姓名(逗号分隔)',
+    vehicle_ids             TEXT            DEFAULT NULL COMMENT '涉案车辆ID(逗号分隔)',
+    grid_code               VARCHAR(32)     DEFAULT NULL COMMENT '地理网格编码',
+    is_solved               TINYINT         DEFAULT 0 COMMENT '是否破案(0-未破/1-已破)',
+    solve_time              DATETIME        DEFAULT NULL COMMENT '破案时间',
+    handler_id              VARCHAR(64)     DEFAULT NULL COMMENT '办案民警ID',
+    handler_name            VARCHAR(64)     DEFAULT NULL COMMENT '办案民警姓名',
+    police_station_code     VARCHAR(32)     DEFAULT NULL COMMENT '管辖派出所编码',
+    police_station_name     VARCHAR(128)    DEFAULT NULL COMMENT '管辖派出所名称',
+    description             TEXT            DEFAULT NULL COMMENT '案件描述',
+    create_time             DATETIME        DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time             DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    create_by               BIGINT          DEFAULT NULL COMMENT '创建人ID',
+    update_by               BIGINT          DEFAULT NULL COMMENT '更新人ID',
+    deleted                 TINYINT         DEFAULT 0 COMMENT '是否删除(0-否/1-是)',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_case_id (case_id),
+    KEY idx_case_type (case_type),
+    KEY idx_case_time (case_time),
+    KEY idx_area_code (area_code),
+    KEY idx_grid_code (grid_code),
+    KEY idx_is_solved (is_solved)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='案件信息统一数据源表';

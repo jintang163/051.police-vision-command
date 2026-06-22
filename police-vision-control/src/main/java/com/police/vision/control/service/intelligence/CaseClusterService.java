@@ -11,7 +11,9 @@ import com.police.vision.control.config.intelligence.ElasticsearchConfig;
 import com.police.vision.control.config.intelligence.IntelligenceConfig;
 import com.police.vision.control.dto.intelligence.ClusterAnalyzeDTO;
 import com.police.vision.control.entity.intelligence.CaseCluster;
+import com.police.vision.control.entity.intelligence.PoliceCaseInfo;
 import com.police.vision.control.mapper.intelligence.CaseClusterMapper;
+import com.police.vision.control.mapper.intelligence.PoliceCaseInfoMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,6 +39,7 @@ public class CaseClusterService {
     private final ElasticsearchConfig elasticsearchConfig;
     private final CaseClusterMapper caseClusterMapper;
     private final IntelligenceConfig intelligenceConfig;
+    private final PoliceCaseInfoMapper policeCaseInfoMapper;
 
     private static final double EARTH_RADIUS_METERS = 6371000.0;
     private static final int MD5_PREFIX_LENGTH = 12;
@@ -50,23 +53,34 @@ public class CaseClusterService {
         int totalCases = 0;
 
         try {
-            if (!isEsEnabled()) {
-                log.warn("Elasticsearch未启用，无法执行串并案分析");
-                result.put("clusters", clusters);
-                result.put("totalCases", 0);
-                result.put("durationMs", 0L);
-                result.put("message", "ES未启用");
-                return result;
-            }
-
             IntelligenceConfig.ClusterConfig clusterCfg = intelligenceConfig.getCluster();
             int timeWindowHours = dto.getTimeWindowHours() != null ? dto.getTimeWindowHours() : clusterCfg.getTimeWindowHours();
             double threshold = dto.getSimilarityThreshold() != null ? dto.getSimilarityThreshold().doubleValue() : clusterCfg.getSimilarityThreshold();
             int minClusterSize = dto.getMinClusterSize() != null ? dto.getMinClusterSize() : clusterCfg.getMinClusterSize();
 
-            List<Map<String, Object>> cases = queryCasesFromEs(dto);
-            totalCases = cases.size();
-            log.info("从ES查询到案件数量: {}", totalCases);
+            List<Map<String, Object>> cases;
+
+            if (!isEsEnabled()) {
+                log.info("Elasticsearch未启用，尝试从DB查询案件数据进行串并案分析");
+                List<PoliceCaseInfo> dbCases = policeCaseInfoMapper.selectByTimeRange(
+                        dto.getStartTime() != null ? dto.getStartTime() : LocalDateTime.now().minusHours(timeWindowHours),
+                        dto.getEndTime() != null ? dto.getEndTime() : LocalDateTime.now(),
+                        dto.getCaseType(),
+                        dto.getAreaCode(),
+                        10000
+                );
+                if (dbCases != null && !dbCases.isEmpty()) {
+                    cases = dbCases.stream().map(this::convertCaseToMap).collect(Collectors.toList());
+                    totalCases = cases.size();
+                    log.info("从DB查询到案件数量: {}", totalCases);
+                } else {
+                    cases = new ArrayList<>();
+                }
+            } else {
+                cases = queryCasesFromEs(dto);
+                totalCases = cases.size();
+                log.info("从ES查询到案件数量: {}", totalCases);
+            }
 
             if (totalCases < minClusterSize) {
                 log.info("案件数量不足，无法形成聚类 (需要至少{}个案件)", minClusterSize);
@@ -229,6 +243,48 @@ public class CaseClusterService {
                             }
                         } catch (Exception e) {
                             log.warn("查询案件详情失败, caseId={}", cid, e);
+                        }
+                    }
+                } else {
+                    for (String cid : caseIdArray) {
+                        try {
+                            LambdaQueryWrapper<PoliceCaseInfo> caseWrapper = new LambdaQueryWrapper<>();
+                            caseWrapper.eq(PoliceCaseInfo::getCaseId, cid.trim());
+                            PoliceCaseInfo caseInfo = policeCaseInfoMapper.selectOne(caseWrapper);
+                            if (caseInfo != null) {
+                                Map<String, Object> caseDetail = convertCaseToMap(caseInfo);
+                                caseList.add(caseDetail);
+
+                                Map<String, Object> timelineItem = new LinkedHashMap<>();
+                                timelineItem.put("caseId", caseDetail.get("case_id"));
+                                timelineItem.put("caseNo", caseDetail.get("case_no"));
+                                timelineItem.put("caseTime", caseDetail.get("case_time"));
+                                timelineItem.put("caseType", caseDetail.get("case_type"));
+                                timelineItem.put("address", caseDetail.get("address"));
+                                timeline.add(timelineItem);
+
+                                Object suspects = caseDetail.get("suspect_ids");
+                                if (suspects != null) {
+                                    String[] arr = String.valueOf(suspects).split("[,，;；]");
+                                    for (String s : arr) {
+                                        if (StringUtils.hasText(s.trim())) {
+                                            suspectSet.add(s.trim());
+                                        }
+                                    }
+                                }
+
+                                Object vehicles = caseDetail.get("vehicle_ids");
+                                if (vehicles != null) {
+                                    String[] arr = String.valueOf(vehicles).split("[,，;；]");
+                                    for (String v : arr) {
+                                        if (StringUtils.hasText(v.trim())) {
+                                            vehicleSet.add(v.trim());
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            log.warn("从DB查询案件详情失败, caseId={}", cid, e);
                         }
                     }
                 }
@@ -1165,5 +1221,27 @@ public class CaseClusterService {
 
     private BigDecimal roundToFourBigDecimal(double value) {
         return BigDecimal.valueOf(value).setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private Map<String, Object> convertCaseToMap(PoliceCaseInfo caseInfo) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("case_id", caseInfo.getCaseId());
+        map.put("case_no", caseInfo.getCaseNo());
+        map.put("case_type", caseInfo.getCaseType());
+        map.put("case_type_name", caseInfo.getCaseTypeName());
+        map.put("modus_operandi", caseInfo.getModusOperandi());
+        map.put("case_keywords", caseInfo.getCaseKeywords());
+        map.put("area_code", caseInfo.getAreaCode());
+        map.put("longitude", caseInfo.getLongitude() != null ? caseInfo.getLongitude().doubleValue() : null);
+        map.put("latitude", caseInfo.getLatitude() != null ? caseInfo.getLatitude().doubleValue() : null);
+        map.put("address", caseInfo.getAddress());
+        map.put("case_time", caseInfo.getCaseTime());
+        map.put("weapon_type", caseInfo.getWeaponType());
+        map.put("target_type", caseInfo.getTargetType());
+        map.put("suspect_ids", caseInfo.getSuspectIds());
+        map.put("vehicle_ids", caseInfo.getVehicleIds());
+        map.put("grid_code", caseInfo.getGridCode());
+        map.put("is_solved", caseInfo.getIsSolved());
+        return map;
     }
 }

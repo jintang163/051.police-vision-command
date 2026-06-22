@@ -6,8 +6,8 @@ import com.police.vision.control.config.intelligence.IntelligenceConfig;
 import com.police.vision.control.crawler.CrawlerUtils;
 import com.police.vision.control.crawler.PublicOpinionPageProcessor;
 import com.police.vision.control.crawler.PublicOpinionPipeline;
-import com.police.vision.control.dto.SentimentAnalysisDTO;
-import com.police.vision.control.dto.SentimentResultDTO;
+import com.police.vision.control.dto.intelligence.SentimentAnalysisDTO;
+import com.police.vision.control.dto.intelligence.SentimentResultDTO;
 import com.police.vision.control.entity.intelligence.CrawlerTask;
 import com.police.vision.control.entity.intelligence.PublicOpinion;
 import com.police.vision.control.mapper.intelligence.CrawlerTaskMapper;
@@ -332,18 +332,18 @@ public class CrawlerService {
     }
 
     private void applySentimentResult(PublicOpinion opinion, SentimentResultDTO result) {
-        String label = result.getSentimentLabel();
+        Integer label = result.getSentimentLabel();
         if (label != null) {
-            switch (label.toLowerCase()) {
-                case "positive":
+            switch (label) {
+                case 2:
                     opinion.setSentimentLabel(1);
                     opinion.setSentimentLabelName("正面");
                     break;
-                case "negative":
+                case 0:
                     opinion.setSentimentLabel(-1);
                     opinion.setSentimentLabelName("负面");
                     break;
-                case "neutral":
+                case 1:
                 default:
                     opinion.setSentimentLabel(0);
                     opinion.setSentimentLabelName("中性");
@@ -351,9 +351,9 @@ public class CrawlerService {
             }
         }
 
-        Double score = result.getSentimentScore();
+        BigDecimal score = result.getSentimentScore();
         if (score != null) {
-            opinion.setSentimentScore(BigDecimal.valueOf(score));
+            opinion.setSentimentScore(score);
         }
 
         List<String> keywords = result.getKeywords();

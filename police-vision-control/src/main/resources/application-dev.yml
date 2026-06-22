@@ -83,7 +83,7 @@ elasticsearch:
   password:
   connect-timeout: 5000
   socket-timeout: 60000
-  case-index: police_cases
+  case-index: police_case_info
   opinion-index: public_opinion
 
 # 情报研判中心配置

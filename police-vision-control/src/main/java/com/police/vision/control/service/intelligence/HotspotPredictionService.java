@@ -1,7 +1,6 @@
 package com.police.vision.control.service.intelligence;
 
 import cn.hutool.core.util.HexUtil;
-import cn.hutool.core.util.RandomUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
@@ -89,25 +88,29 @@ public class HotspotPredictionService {
         LocalDateTime predictEndTime = predictStartTime.plusHours(predictHours);
 
         Map<String, double[]> gridTimeSeries;
-        boolean mock = false;
 
         try {
             gridTimeSeries = queryGridTimeSeriesFromEs(historyDays, predictHours, caseType, areaCode, gridSizeMeters);
         } catch (Exception e) {
-            log.warn("从Elasticsearch查询警情数据失败，尝试DB降级，batch={}：{}", predictionBatch, e.getMessage());
-            try {
-                gridTimeSeries = queryGridTimeSeriesFromDb(historyDays, predictHours, caseType, areaCode, gridSizeMeters);
-            } catch (Exception e2) {
-                log.warn("从DB查询也失败，生成模拟数据，batch={}：{}", predictionBatch, e2.getMessage());
-                gridTimeSeries = generateMockTimeSeries(historyDays, predictHours, areaCode, gridSizeMeters);
-                mock = true;
-            }
+            log.warn("从ES查询警情数据失败，尝试DB降级，batch={}：{}", predictionBatch, e.getMessage());
         }
 
         if (gridTimeSeries == null || gridTimeSeries.isEmpty()) {
-            log.warn("无历史数据可用于预测，生成模拟数据，batch={}", predictionBatch);
-            gridTimeSeries = generateMockTimeSeries(historyDays, predictHours, areaCode, gridSizeMeters);
-            mock = true;
+            try {
+                gridTimeSeries = queryGridTimeSeriesFromDb(historyDays, predictHours, caseType, areaCode, gridSizeMeters);
+            } catch (Exception e2) {
+                log.error("从DB查询也失败，batch={}：{}", predictionBatch, e2.getMessage());
+            }
+        }
+        if (gridTimeSeries == null || gridTimeSeries.isEmpty()) {
+            log.warn("无历史数据可用于预测，跳过本次预测，batch={}", predictionBatch);
+            Map<String, Object> emptyResult = new LinkedHashMap<>();
+            emptyResult.put("predictionBatch", predictionBatch);
+            emptyResult.put("totalGrids", 0);
+            emptyResult.put("highRiskCount", 0);
+            emptyResult.put("durationMs", System.currentTimeMillis() - startTimeMs);
+            emptyResult.put("message", "无历史数据");
+            return emptyResult;
         }
 
         List<HotspotPrediction> predictions = new ArrayList<>();
@@ -244,8 +247,8 @@ public class HotspotPredictionService {
             prediction.setModelRunTime(LocalDateTime.now());
             prediction.setModelVersion("1.0.0");
             prediction.setSarimaParams(sarimaParamsJson);
-            prediction.setStatus(mock ? 0 : 1);
-            prediction.setStatusName(mock ? "模拟数据" : "正常");
+            prediction.setStatus(1);
+            prediction.setStatusName("正常");
 
             if (useEwma) {
                 prediction.setSeasonalPattern("EWMA_FALLBACK");
@@ -270,14 +273,13 @@ public class HotspotPredictionService {
         result.put("totalGrids", totalGrids);
         result.put("highRiskCount", highRiskCount);
         result.put("durationMs", durationMs);
-        result.put("mock", mock);
         result.put("predictStartTime", predictStartTime);
         result.put("predictEndTime", predictEndTime);
         result.put("caseType", caseType);
         result.put("areaCode", areaCode);
 
-        log.info("热点预测任务完成：batch={}, totalGrids={}, highRisk={}, duration={}ms, mock={}",
-                predictionBatch, totalGrids, highRiskCount, durationMs, mock);
+        log.info("热点预测任务完成：batch={}, totalGrids={}, highRisk={}, duration={}ms",
+                predictionBatch, totalGrids, highRiskCount, durationMs);
 
         return result;
     }
@@ -560,73 +562,7 @@ public class HotspotPredictionService {
         return result;
     }
 
-    private Map<String, double[]> generateMockTimeSeries(int historyDays, int predictHours,
-                                                          String areaCode, int gridSizeMeters) {
-        Map<String, double[]> result = new LinkedHashMap<>();
-        int totalHours = historyDays * 24;
-        int numGrids = 15 + RandomUtil.randomInt(10);
 
-        double baseLng = 116.404;
-        double baseLat = 39.915;
-        if (areaCode != null && areaCode.length() >= 6) {
-            try {
-                int code = Integer.parseInt(areaCode.substring(0, 2));
-                baseLng = 105 + (code % 30) * 1.0;
-                baseLat = 25 + (code % 15) * 0.8;
-            } catch (NumberFormatException ignored) {
-            }
-        }
-
-        Random random = new Random(42);
-        for (int i = 0; i < numGrids; i++) {
-            int gridX = RandomUtil.randomInt(-5, 6);
-            int gridY = RandomUtil.randomInt(-5, 6);
-            double lng = baseLng + gridX * 0.005;
-            double lat = baseLat + gridY * 0.005;
-            String gridCode = lngLatToGridCode(lng, lat, gridSizeMeters);
-
-            double[] series = new double[totalHours];
-            double baseRate = 0.1 + random.nextDouble() * 0.5;
-            double dailyAmp = 0.3 + random.nextDouble() * 0.4;
-            double weeklyAmp = 0.1 + random.nextDouble() * 0.2;
-
-            for (int h = 0; h < totalHours; h++) {
-                int hourOfDay = h % 24;
-                int dayOfWeek = (h / 24) % 7;
-
-                double dailyPattern = 1 + dailyAmp * Math.sin(2 * Math.PI * (hourOfDay - 8) / 24);
-                double weeklyPattern = 1 + weeklyAmp * Math.sin(2 * Math.PI * (dayOfWeek - 1) / 7);
-                double trend = 1 + 0.0001 * h;
-
-                double lambda = baseRate * dailyPattern * weeklyPattern * trend;
-                lambda = Math.max(0, lambda);
-                series[h] = samplePoisson(lambda, random);
-
-                if (random.nextDouble() < 0.02) {
-                    series[h] += RandomUtil.randomInt(1, 5);
-                }
-            }
-            result.put(gridCode, series);
-        }
-        return result;
-    }
-
-    private int samplePoisson(double lambda, Random random) {
-        if (lambda <= 0) return 0;
-        if (lambda < 30) {
-            double L = Math.exp(-lambda);
-            double p = 1.0;
-            int k = 0;
-            do {
-                k++;
-                p *= random.nextDouble();
-            } while (p > L);
-            return k - 1;
-        } else {
-            double normal = random.nextGaussian() * Math.sqrt(lambda) + lambda;
-            return (int) Math.max(0, Math.round(normal));
-        }
-    }
 
     private Map<String, Integer> queryActualCountsFromEs(LocalDateTime startTime, LocalDateTime endTime,
                                                           String caseType, String areaCode, List<String> gridCodes) {
@@ -708,7 +644,7 @@ public class HotspotPredictionService {
 
     private String generatePredictionBatch() {
         String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String rand = String.format("%06d", RandomUtil.randomInt(1000000));
+        String rand = String.format("%06d", System.currentTimeMillis() % 1000000);
         return date + "-" + rand;
     }
 

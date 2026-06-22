@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>情报研判中心</title>
+<link rel="stylesheet" href="https://unpkg.com/element-plus@1.7.3/dist/index.css">
+<link rel="stylesheet" href="https://unpkg.com/element-plus@1.7.3/theme-chalk/dark/css-vars.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg-primary:#1a1f36;--bg-secondary:#232845;--bg-card:#2a2f4a;--border-glow:#00d4ff;--text-primary:#e0e6f0;--text-secondary:#8b92a8;--accent-cyan:#00d4ff;--accent-green:#00e676;--accent-red:#ff4757;--accent-orange:#ffa502;--accent-yellow:#ffd600}
+html,body{height:100%;font-family:'PingFang SC','Microsoft YaHei','Helvetica Neue',Arial,sans-serif;background:var(--bg-primary);color:var(--text-primary)}
+#app{min-height:100vh;padding:16px}
+.page-header{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:linear-gradient(135deg,#1e2444 0%,#2a3060 100%);border:1px solid rgba(0,212,255,0.2);border-radius:8px;margin-bottom:16px;box-shadow:0 0 20px rgba(0,212,255,0.08)}
+.page-header h1{font-size:22px;font-weight:600;background:linear-gradient(90deg,#00d4ff,#00e676);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px}
+.page-header .header-time{color:var(--text-secondary);font-size:13px}
+.glow-card{background:var(--bg-card);border:1px solid rgba(0,212,255,0.15);border-radius:8px;box-shadow:0 0 12px rgba(0,212,255,0.06);transition:box-shadow .3s,border-color .3s}
+.glow-card:hover{border-color:rgba(0,212,255,0.35);box-shadow:0 0 20px rgba(0,212,255,0.12)}
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.stat-card{padding:20px;text-align:center}
+.stat-card .stat-value{font-size:32px;font-weight:700;margin-bottom:4px}
+.stat-card .stat-label{font-size:13px;color:var(--text-secondary)}
+.stat-card .stat-value.cyan{color:var(--accent-cyan)}
+.stat-card .stat-value.green{color:var(--accent-green)}
+.stat-card .stat-value.orange{color:var(--accent-orange)}
+.stat-card .stat-value.red{color:var(--accent-red)}
+.tab-section .el-tabs__header{margin-bottom:16px}
+.tab-section .el-tabs__item{font-size:15px;color:var(--text-secondary)!important}
+.tab-section .el-tabs__item.is-active{color:var(--accent-cyan)!important}
+.tab-section .el-tabs__active-bar{background-color:var(--accent-cyan)}
+.el-table{--el-table-bg-color:transparent;--el-table-tr-bg-color:transparent;--el-table-header-bg-color:rgba(0,212,255,0.06);--el-table-row-hover-bg-color:rgba(0,212,255,0.04);--el-table-border-color:rgba(0,212,255,0.1);--el-table-text-color:var(--text-primary);--el-table-header-text-color:var(--accent-cyan)}
+.el-table th.el-table__cell{font-weight:600}
+.risk-tag{font-weight:600;padding:2px 10px;border-radius:4px;font-size:12px}
+.risk-L1{background:rgba(0,230,118,0.15);color:#00e676;border:1px solid rgba(0,230,118,0.3)}
+.risk-L2{background:rgba(255,213,0,0.15);color:#ffd600;border:1px solid rgba(255,213,0,0.3)}
+.risk-L3{background:rgba(255,165,2,0.15);color:#ffa502;border:1px solid rgba(255,165,2,0.3)}
+.risk-L4{background:rgba(255,71,87,0.15);color:#ff4757;border:1px solid rgba(255,71,87,0.3)}
+.sentiment-tag{padding:2px 10px;border-radius:4px;font-size:12px;font-weight:600}
+.sentiment-pos{background:rgba(0,230,118,0.15);color:#00e676;border:1px solid rgba(0,230,118,0.3)}
+.sentiment-neu{background:rgba(139,146,168,0.15);color:#8b92a8;border:1px solid rgba(139,146,168,0.3)}
+.sentiment-neg{background:rgba(255,71,87,0.15);color:#ff4757;border:1px solid rgba(255,71,87,0.3)}
+.status-tag{padding:2px 10px;border-radius:4px;font-size:12px}
+.status-done{background:rgba(0,230,118,0.15);color:#00e676}
+.status-pending{background:rgba(255,165,2,0.15);color:#ffa502}
+.status-regen{background:rgba(0,212,255,0.15);color:#00d4ff}
+.hotspot-layout{display:grid;grid-template-columns:1fr 360px;gap:16px;margin-bottom:16px}
+.high-risk-list{max-height:400px;overflow-y:auto}
+.high-risk-list .risk-item{padding:12px 16px;border-bottom:1px solid rgba(0,212,255,0.08);display:flex;justify-content:space-between;align-items:center;cursor:pointer;transition:background .2s}
+.high-risk-list .risk-item:hover{background:rgba(0,212,255,0.06)}
+.high-risk-list .risk-item .risk-name{font-size:14px;margin-bottom:4px}
+.high-risk-list .risk-item .risk-detail{font-size:12px;color:var(--text-secondary)}
+.cluster-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px}
+.cluster-card{padding:20px;cursor:pointer}
+.cluster-card .cluster-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.cluster-card .cluster-title{font-size:15px;font-weight:600;color:var(--accent-cyan)}
+.cluster-card .cluster-meta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:13px;color:var(--text-secondary)}
+.cluster-card .cluster-meta span{display:flex;align-items:center;gap:4px}
+.cluster-detail{padding:16px;background:rgba(0,0,0,0.2);border-radius:6px;margin-top:12px}
+.cluster-detail h4{color:var(--accent-cyan);margin-bottom:8px;font-size:14px}
+.cluster-detail .tag-group{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.cluster-detail .tag-group .mo-tag{padding:2px 8px;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.2);border-radius:3px;font-size:12px;color:var(--accent-cyan)}
+.opinion-layout{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.word-cloud{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;padding:20px;min-height:200px}
+.word-cloud .wc-word{padding:4px 10px;border-radius:4px;cursor:default;transition:transform .2s}
+.word-cloud .wc-word:hover{transform:scale(1.15)}
+.model-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+.model-card{padding:20px}
+.model-card .model-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.model-card .model-name{font-size:15px;font-weight:600;color:var(--accent-cyan)}
+.model-card .model-meta{font-size:13px;color:var(--text-secondary);margin-bottom:6px}
+.report-dialog .el-dialog{background:var(--bg-secondary)!important;border:1px solid rgba(0,212,255,0.2)}
+.report-dialog .el-dialog__header{border-bottom:1px solid rgba(0,212,255,0.1)}
+.report-dialog .el-dialog__title{color:var(--accent-cyan)!important}
+.report-content{max-height:70vh;overflow-y:auto;padding:16px;line-height:1.8;font-size:14px}
+.report-content h1{color:var(--accent-cyan);font-size:20px;margin:16px 0 12px;border-bottom:1px solid rgba(0,212,255,0.15);padding-bottom:8px}
+.report-content h2{color:var(--accent-cyan);font-size:17px;margin:14px 0 10px}
+.report-content h3{color:#7ee8ff;font-size:15px;margin:10px 0 8px}
+.report-content p{margin:8px 0}
+.report-content ul,.report-content ol{margin:8px 0;padding-left:24px}
+.report-content li{margin:4px 0}
+.report-content strong{color:var(--accent-cyan)}
+.report-content code{background:rgba(0,212,255,0.08);padding:1px 6px;border-radius:3px;font-size:13px}
+.report-content pre{background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;overflow-x:auto;margin:10px 0}
+.report-content pre code{background:transparent;padding:0}
+.report-content table{border-collapse:collapse;width:100%;margin:10px 0}
+.report-content th,.report-content td{border:1px solid rgba(0,212,255,0.15);padding:6px 12px;text-align:left}
+.report-content th{background:rgba(0,212,255,0.08);color:var(--accent-cyan)}
+.report-metrics{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.report-metrics .metric-tag{padding:4px 12px;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.2);border-radius:4px;font-size:13px;color:var(--accent-cyan)}
+.chart-container{padding:16px}
+.el-pagination{--el-pagination-bg-color:transparent;--el-pagination-text-color:var(--text-secondary);--el-pagination-button-bg-color:rgba(0,212,255,0.08);--el-pagination-hover-color:var(--accent-cyan)}
+.filter-bar{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.filter-bar .el-input,.filter-bar .el-select{width:180px}
+.empty-tip{text-align:center;padding:60px 0;color:var(--text-secondary);font-size:14px}
+@media(max-width:900px){.stat-row{grid-template-columns:repeat(2,1fr)}.hotspot-layout,.opinion-layout{grid-template-columns:1fr}.cluster-grid,.model-grid{grid-template-columns:1fr}}
+.el-dialog{--el-dialog-bg-color:var(--bg-secondary)}
+.el-form-item__label{color:var(--text-secondary)!important}
+</style>
+</head>
+<body>
+<div id="app">
+<div class="page-header">
+<h1>🔍 情报研判中心</h1>
+<span class="header-time">{{ currentTime }}</span>
+</div>
+
+<div class="tab-section glow-card" style="padding:16px">
+<el-tabs v-model="activeTab" @tab-change="onTabChange">
+<el-tab-pane label="情报报告" name="report"></el-tab-pane>
+<el-tab-pane label="热点预测" name="hotspot"></el-tab-pane>
+<el-tab-pane label="串并案分析" name="cluster"></el-tab-pane>
+<el-tab-pane label="舆情监测" name="opinion"></el-tab-pane>
+<el-tab-pane label="研判模型" name="model"></el-tab-pane>
+</el-tabs>
+
+<!-- ===== 情报报告 Tab ===== -->
+<div v-if="activeTab==='report'">
+<div class="stat-row">
+<div class="glow-card stat-card">
+<div class="stat-value cyan">{{ reportStats.todayCount || 0 }}</div>
+<div class="stat-label">今日报告</div>
+</div>
+<div class="glow-card stat-card">
+<div class="stat-value green">{{ reportStats.weekCount || 0 }}</div>
+<div class="stat-label">本周报告</div>
+</div>
+<div class="glow-card stat-card">
+<div class="stat-value orange">{{ reportStats.monthCount || 0 }}</div>
+<div class="stat-label">本月报告</div>
+</div>
+<div class="glow-card stat-card">
+<div class="stat-value red">{{ reportStats.totalCount || 0 }}</div>
+<div class="stat-label">累计报告</div>
+</div>
+</div>
+
+<div class="filter-bar">
+<el-select v-model="reportFilter.productType" placeholder="报告类型" clearable @change="loadReports">
+<el-option label="每日态势" value="DAILY_REPORT"></el-option>
+<el-option label="每周态势" value="WEEKLY_REPORT"></el-option>
+<el-option label="每月态势" value="MONTHLY_REPORT"></el-option>
+<el-option label="情报报告" value="REPORT"></el-option>
+<el-option label="串并案报告" value="CLUSTER"></el-option>
+<el-option label="热点预测报告" value="PREDICTION"></el-option>
+<el-option label="舆情报告" value="CRAWLER"></el-option>
+</el-select>
+<el-select v-model="reportFilter.status" placeholder="状态" clearable @change="loadReports">
+<el-option label="已生成" value="1"></el-option>
+<el-option label="已重新生成" value="2"></el-option>
+</el-select>
+<el-button type="primary" @click="openGenerateDialog" style="background:rgba(0,212,255,0.2);border-color:rgba(0,212,255,0.4);color:#00d4ff">生成报告</el-button>
+</div>
+
+<el-table :data="reportList" stripe v-loading="reportLoading" style="width:100%">
+<el-table-column label="类型" width="100">
+<template #default="{row}">
+<span :style="{color: typeColor(row.productType)}">{{ row.productTypeName || row.productType }}</span>
+</template>
+</el-table-column>
+<el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip></el-table-column>
+<el-table-column label="生成时间" width="170">
+<template #default="{row}">{{ formatTime(row.generateTime) }}</template>
+</el-table-column>
+<el-table-column label="耗时" width="80">
+<template #default="{row}">{{ row.generateSeconds != null ? row.generateSeconds + 's' : '-' }}</template>
+</el-table-column>
+<el-table-column label="状态" width="110">
+<template #default="{row}">
+<span :class="['status-tag', row.statusName==='已生成'?'status-done':row.statusName==='已重新生成'?'status-regen':'status-pending']">{{ row.statusName }}</span>
+</template>
+</el-table-column>
+<el-table-column label="操作" width="200" fixed="right">
+<template #default="{row}">
+<el-button link type="primary" @click="viewReport(row)" style="color:#00d4ff">查看</el-button>
+<el-button link type="primary" @click="regenerateReport(row)" style="color:#ffa502">重新生成</el-button>
+<el-button link type="primary" @click="printReport(row)" style="color:#00e676">下载PDF</el-button>
+</template>
+</el-table-column>
+</el-table>
+
+<div style="display:flex;justify-content:flex-end;margin-top:16px">
+<el-pagination background layout="total, prev, pager, next" :total="reportTotal" :page-size="reportFilter.pageSize" v-model:current-page="reportFilter.pageNum" @current-change="loadReports"></el-pagination>
+</div>
+</div>
+
+<!-- ===== 热点预测 Tab ===== -->
+<div v-if="activeTab==='hotspot'">
+<div class="filter-bar">
+<el-select v-model="hotspotFilter.caseType" placeholder="案件类型" clearable @change="loadHotspots">
+<el-option label="盗窃" value="THEFT"></el-option>
+<el-option label="诈骗" value="FRAUD"></el-option>
+<el-option label="抢劫" value="ROBBERY"></el-option>
+<el-option label="斗殴" value="ASSAULT"></el-option>
+</el-select>
+<el-select v-model="hotspotFilter.minRiskLevel" placeholder="最低风险等级" clearable @change="loadHotspots">
+<el-option label="L1" :value="1"></el-option>
+<el-option label="L2" :value="2"></el-option>
+<el-option label="L3" :value="3"></el-option>
+<el-option label="L4" :value="4"></el-option>
+</el-select>
+<el-button type="primary" @click="runPrediction" style="background:rgba(0,212,255,0.2);border-color:rgba(0,212,255,0.4);color:#00d4ff">运行预测</el-button>
+</div>
+<div class="hotspot-layout">
+<div class="glow-card chart-container">
+<div ref="hotspotChart" style="width:100%;height:400px"></div>
+</div>
+<div class="glow-card" style="padding:0">
+<div style="padding:14px 16px;border-bottom:1px solid rgba(0,212,255,0.1);font-weight:600;color:var(--accent-cyan)">高风险区域</div>
+<div class="high-risk-list" v-loading="hotspotLoading">
+<div class="risk-item" v-for="item in highRiskList" :key="item.predictionId">
+<div>
+<div class="risk-name">{{ item.areaName || item.gridCode }}</div>
+<div class="risk-detail">{{ item.caseTypeName || item.caseType }} · 预计{{ item.predictedCount || 0 }}起</div>
+</div>
+<span :class="['risk-tag','risk-L'+item.riskLevel]">L{{ item.riskLevel }}</span>
+</div>
+<div v-if="!hotspotLoading && highRiskList.length===0" class="empty-tip">暂无高风险预测数据</div>
+</div>
+</div>
+</div>
+<div class="glow-card chart-container">
+<div ref="trendChart" style="width:100%;height:280px"></div>
+</div>
+</div>
+
+<!-- ===== 串并案分析 Tab ===== -->
+<div v-if="activeTab==='cluster'">
+<div class="filter-bar">
+<el-select v-model="clusterFilter.caseType" placeholder="案件类型" clearable @change="loadClusters">
+<el-option label="盗窃" value="THEFT"></el-option>
+<el-option label="诈骗" value="FRAUD"></el-option>
+<el-option label="抢劫" value="ROBBERY"></el-option>
+</el-select>
+<el-select v-model="clusterFilter.alertLevel" placeholder="预警等级" clearable @change="loadClusters">
+<el-option label="L1" :value="1"></el-option>
+<el-option label="L2" :value="2"></el-option>
+<el-option label="L3" :value="3"></el-option>
+<el-option label="L4" :value="4"></el-option>
+</el-select>
+<el-button type="primary" @click="openClusterAnalyze" style="background:rgba(0,212,255,0.2);border-color:rgba(0,212,255,0.4);color:#00d4ff">发起分析</el-button>
+</div>
+<div class="cluster-grid">
+<div class="glow-card cluster-card" v-for="item in clusterList" :key="item.clusterId" @click="toggleClusterDetail(item)">
+<div class="cluster-header">
+<span class="cluster-title">{{ item.clusterName || '未命名聚类' }}</span>
+<span :class="['risk-tag','risk-L'+(item.alertLevel||1)]">L{{ item.alertLevel || 1 }}</span>
+</div>
+<div class="cluster-meta">
+<span>📋 案件: {{ item.caseCount || 0 }}起</span>
+<span>📊 相似度: {{ item.similarityScore != null ? (item.similarityScore * 100).toFixed(1) + '%' : '-' }}</span>
+<span>📍 {{ item.areaName || '-' }}</span>
+</div>
+<div style="font-size:12px;color:var(--text-secondary)">
+{{ formatTime(item.startTime) }} ~ {{ formatTime(item.endTime) }}
+</div>
+<div v-if="expandedCluster===item.clusterId" class="cluster-detail" @click.stop>
+<h4>作案手法标签</h4>
+<div class="tag-group">
+<span class="mo-tag" v-for="kw in parseKeywords(item.modusKeywords)" :key="kw">{{ kw }}</span>
+<span v-if="!parseKeywords(item.modusKeywords).length" style="color:var(--text-secondary);font-size:12px">暂无标签</span>
+</div>
+<h4>侦查建议</h4>
+<p style="font-size:13px;color:var(--text-secondary);line-height:1.6">{{ item.investigationSuggestion || '暂无建议' }}</p>
+<div style="margin-top:12px;text-align:right">
+<el-button size="small" type="primary" @click.stop="markClusterHandled(item)" style="background:rgba(0,230,118,0.2);border-color:rgba(0,230,118,0.4);color:#00e676">标记已处理</el-button>
+</div>
+</div>
+</div>
+<div v-if="!clusterLoading && clusterList.length===0" class="empty-tip" style="grid-column:1/-1">暂无串并案数据</div>
+</div>
+<div style="display:flex;justify-content:flex-end;margin-top:16px">
+<el-pagination background layout="total, prev, pager, next" :total="clusterTotal" :page-size="clusterFilter.pageSize" v-model:current-page="clusterFilter.pageNum" @current-change="loadClusters"></el-pagination>
+</div>
+</div>
+
+<!-- ===== 舆情监测 Tab ===== -->
+<div v-if="activeTab==='opinion'">
+<div class="opinion-layout">
+<div class="glow-card chart-container">
+<div ref="sentimentChart" style="width:100%;height:280px"></div>
+</div>
+<div class="glow-card" style="padding:16px">
+<div style="margin-bottom:12px;font-weight:600;color:var(--accent-cyan)">关键词云</div>
+<div class="word-cloud">
+<span class="wc-word" v-for="(w,i) in opinionKeywords" :key="i" :style="{fontSize:w.size+'px',color:w.color,background:w.bg}">{{ w.text }}</span>
+</div>
+<div v-if="!opinionKeywords.length" class="empty-tip">暂无关键词数据</div>
+</div>
+</div>
+<div class="filter-bar">
+<el-input v-model="opinionFilter.keyword" placeholder="搜索关键词" clearable @change="loadOpinions"></el-input>
+<el-select v-model="opinionFilter.sentimentLabel" placeholder="情感" clearable @change="loadOpinions">
+<el-option label="正面" :value="1"></el-option>
+<el-option label="中性" :value="0"></el-option>
+<el-option label="负面" :value="-1"></el-option>
+</el-select>
+<el-select v-model="opinionFilter.alertLevel" placeholder="预警等级" clearable @change="loadOpinions">
+<el-option label="L1" :value="1"></el-option>
+<el-option label="L2" :value="2"></el-option>
+<el-option label="L3" :value="3"></el-option>
+<el-option label="L4" :value="4"></el-option>
+</el-select>
+</div>
+<el-table :data="opinionList" stripe v-loading="opinionLoading" style="width:100%">
+<el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip></el-table-column>
+<el-table-column prop="sourceSiteName" label="来源" width="120"></el-table-column>
+<el-table-column label="情感" width="80">
+<template #default="{row}">
+<span :class="['sentiment-tag', row.sentimentLabel===1?'sentiment-pos':row.sentimentLabel===-1?'sentiment-neg':'sentiment-neu']">{{ row.sentimentLabel===1?'正面':row.sentimentLabel===-1?'负面':'中性' }}</span>
+</template>
+</el-table-column>
+<el-table-column label="发布时间" width="170">
+<template #default="{row}">{{ formatTime(row.publishTime) }}</template>
+</el-table-column>
+<el-table-column label="预警" width="70">
+<template #default="{row}">
+<span v-if="row.alertLevel" :class="['risk-tag','risk-L'+row.alertLevel]">L{{ row.alertLevel }}</span>
+<span v-else>-</span>
+</template>
+</el-table-column>
+<el-table-column label="状态" width="80">
+<template #default="{row}">
+<span :class="['status-tag', row.status===2?'status-done':'status-pending']">{{ row.statusName || (row.status===2?'已处理':'待处理') }}</span>
+</template>
+</el-table-column>
+<el-table-column label="操作" width="100" fixed="right">
+<template #default="{row}">
+<el-button v-if="row.status!==2" link type="primary" @click="markOpinionHandled(row)" style="color:#00e676">标记已处理</el-button>
+<span v-else style="color:var(--text-secondary);font-size:12px">已处理</span>
+</template>
+</el-table-column>
+</el-table>
+<div style="display:flex;justify-content:flex-end;margin-top:16px">
+<el-pagination background layout="total, prev, pager, next" :total="opinionTotal" :page-size="opinionFilter.pageSize" v-model:current-page="opinionFilter.pageNum" @current-change="loadOpinions"></el-pagination>
+</div>
+</div>
+
+<!-- ===== 研判模型 Tab ===== -->
+<div v-if="activeTab==='model'">
+<div class="filter-bar">
+<el-select v-model="modelFilter.modelType" placeholder="模型类型" clearable @change="loadModels">
+<el-option label="热点预测" value="HOTSPOT_PREDICTION"></el-option>
+<el-option label="串并案分析" value="CASE_CLUSTER"></el-option>
+<el-option label="情感分析" value="SENTIMENT"></el-option>
+<el-option label="趋势预测" value="TREND"></el-option>
+</el-select>
+<el-select v-model="modelFilter.enabled" placeholder="状态" clearable @change="loadModels">
+<el-option label="已启用" :value="1"></el-option>
+<el-option label="已禁用" :value="0"></el-option>
+</el-select>
+<el-button type="primary" @click="openModelDialog(null)" style="background:rgba(0,212,255,0.2);border-color:rgba(0,212,255,0.4);color:#00d4ff">新建模型</el-button>
+</div>
+<div class="model-grid">
+<div class="glow-card model-card" v-for="item in modelList" :key="item.modelId">
+<div class="model-header">
+<span class="model-name">{{ item.modelName }}</span>
+<span :class="['status-tag', item.enabled===1?'status-done':'status-pending']">{{ item.enabled===1?'已启用':'已禁用' }}</span>
+</div>
+<div class="model-meta">类型：{{ item.modelTypeName || item.modelType }}</div>
+<div class="model-meta">分类：{{ item.category || '-' }}</div>
+<div class="model-meta">上次执行：{{ formatTime(item.lastExecuteTime) }}</div>
+<div style="margin-top:12px;display:flex;gap:8px">
+<el-button size="small" @click="toggleModel(item)" :style="{background:item.enabled?'rgba(255,71,87,0.15)':'rgba(0,230,118,0.15)',borderColor:item.enabled?'rgba(255,71,87,0.3)':'rgba(0,230,118,0.3)',color:item.enabled?'#ff4757':'#00e676'}">{{ item.enabled?'禁用':'启用' }}</el-button>
+<el-button size="small" @click="executeModel(item)" style="background:rgba(0,212,255,0.15);border-color:rgba(0,212,255,0.3);color:#00d4ff">立即执行</el-button>
+<el-button size="small" @click="openModelDialog(item)" style="background:rgba(255,213,0,0.1);border-color:rgba(255,213,0,0.3);color:#ffd600">编辑</el-button>
+</div>
+</div>
+<div v-if="!modelLoading && modelList.length===0" class="empty-tip" style="grid-column:1/-1">暂无模型数据</div>
+</div>
+<div style="display:flex;justify-content:flex-end;margin-top:16px">
+<el-pagination background layout="total, prev, pager, next" :total="modelTotal" :page-size="modelFilter.pageSize" v-model:current-page="modelFilter.pageNum" @current-change="loadModels"></el-pagination>
+</div>
+</div>
+</div>
+
+<!-- ===== 报告查看对话框 ===== -->
+<el-dialog v-model="reportDialogVisible" :title="currentReport.title||'报告详情'" width="70%" top="5vh" custom-class="report-dialog" destroy-on-close>
+<div v-if="currentReport.summary" style="margin-bottom:12px;padding:12px;background:rgba(0,212,255,0.05);border-radius:6px;border-left:3px solid var(--accent-cyan)">
+<div style="color:var(--accent-cyan);font-size:13px;margin-bottom:4px">摘要</div>
+<div style="font-size:14px;color:var(--text-secondary);line-height:1.6">{{ currentReport.summary }}</div>
+</div>
+<div class="report-metrics" v-if="currentReport.alarmCount!=null">
+<span class="metric-tag">警情 {{ currentReport.alarmCount }}</span>
+<span class="metric-tag">案件 {{ currentReport.caseCount }}</span>
+<span class="metric-tag">重点人员 {{ currentReport.personCount }}</span>
+<span class="metric-tag">车辆 {{ currentReport.vehicleCount }}</span>
+<span class="metric-tag">舆情 {{ currentReport.opinionCount }}</span>
+</div>
+<div class="report-content" v-html="renderedMarkdown"></div>
+</el-dialog>
+
+<!-- ===== 生成报告对话框 ===== -->
+<el-dialog v-model="generateDialogVisible" title="生成情报报告" width="500px" destroy-on-close>
+<el-form :model="generateForm" label-width="100px">
+<el-form-item label="报告类型">
+<el-select v-model="generateForm.productType" style="width:100%">
+<el-option label="每日态势报告" value="DAILY_REPORT"></el-option>
+<el-option label="每周态势报告" value="WEEKLY_REPORT"></el-option>
+<el-option label="每月态势报告" value="MONTHLY_REPORT"></el-option>
+<el-option label="情报报告" value="REPORT"></el-option>
+</el-select>
+</el-form-item>
+<el-form-item label="开始日期">
+<el-date-picker v-model="generateForm.reportStartDate" type="date" value-format="YYYY-MM-DD" style="width:100%"></el-date-picker>
+</el-form-item>
+<el-form-item label="结束日期">
+<el-date-picker v-model="generateForm.reportEndDate" type="date" value-format="YYYY-MM-DD" style="width:100%"></el-date-picker>
+</el-form-item>
+</el-form>
+<template #footer>
+<el-button @click="generateDialogVisible=false">取消</el-button>
+<el-button type="primary" @click="doGenerateReport" :loading="generating" style="background:rgba(0,212,255,0.2);border-color:rgba(0,212,255,0.4);color:#00d4ff">生成</el-button>
+</template>
+</el-dialog>
+
+<!-- ===== 模型编辑对话框 ===== -->
+<el-dialog v-model="modelDialogVisible" :title="editingModel?'编辑模型':'新建模型'" width="520px" destroy-on-close>
+<el-form :model="modelForm" label-width="100px">
+<el-form-item label="模型名称">
+<el-input v-model="modelForm.modelName"></el-input>
+</el-form-item>
+<el-form-item label="模型类型">
+<el-select v-model="modelForm.modelType" style="width:100%">
+<el-option label="热点预测" value="HOTSPOT_PREDICTION"></el-option>
+<el-option label="串并案分析" value="CASE_CLUSTER"></el-option>
+<el-option label="情感分析" value="SENTIMENT"></el-option>
+<el-option label="趋势预测" value="TREND"></el-option>
+</el-select>
+</el-form-item>
+<el-form-item label="分类">
+<el-input v-model="modelForm.category"></el-input>
+</el-form-item>
+<el-form-item label="Cron表达式">
+<el-input v-model="modelForm.cronExpression" placeholder="0 0 8 * * ?"></el-input>
+</el-form-item>
+<el-form-item label="描述">
+<el-input v-model="modelForm.description" type="textarea" :rows="3"></el-input>
+</el-form-item>
+</el-form>
+<template #footer>
+<el-button @click="modelDialogVisible=false">取消</el-button>
+<el-button type="primary" @click="saveModel" style="background:rgba(0,212,255,0.2);border-color:rgba(0,212,255,0.4);color:#00d4ff">保存</el-button>
+</template>
+</el-dialog>
+
+<!-- ===== 串并案分析对话框 ===== -->
+<el-dialog v-model="clusterAnalyzeVisible" title="发起串并案分析" width="500px" destroy-on-close>
+<el-form :model="clusterAnalyzeForm" label-width="100px">
+<el-form-item label="案件类型">
+<el-select v-model="clusterAnalyzeForm.caseType" style="width:100%">
+<el-option label="盗窃" value="THEFT"></el-option>
+<el-option label="诈骗" value="FRAUD"></el-option>
+<el-option label="抢劫" value="ROBBERY"></el-option>
+</el-select>
+</el-form-item>
+<el-form-item label="相似阈值">
+<el-slider v-model="clusterAnalyzeForm.threshold" :min="50" :max="100" :step="5" show-input></el-slider>
+</el-form-item>
+</el-form>
+<template #footer>
+<el-button @click="clusterAnalyzeVisible=false">取消</el-button>
+<el-button type="primary" @click="doClusterAnalyze" :loading="clusterAnalyzing" style="background:rgba(0,212,255,0.2);border-color:rgba(0,212,255,0.4);color:#00d4ff">分析</el-button>
+</template>
+</el-dialog>
+</div>
+
+<script src="https://unpkg.com/vue@3.4.27/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus@1.7.3/dist/index.full.min.js"></script>
+<script src="https://unpkg.com/element-plus@1.7.3/dist/locale/zh-cn.min.js"></script>
+<script src="https://unpkg.com/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
+<script>
+const { createApp, ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } = Vue;
+
+const app = createApp({
+setup() {
+const activeTab = ref('report');
+const currentTime = ref('');
+
+let timer = null;
+function updateTime() {
+const now = new Date();
+currentTime.value = now.getFullYear() + '-' +
+String(now.getMonth()+1).padStart(2,'0') + '-' +
+String(now.getDate()).padStart(2,'0') + ' ' +
+String(now.getHours()).padStart(2,'0') + ':' +
+String(now.getMinutes()).padStart(2,'0') + ':' +
+String(now.getSeconds()).padStart(2,'0');
+}
+
+function formatTime(val) {
+if (!val) return '-';
+if (typeof val === 'string') return val.replace('T',' ').substring(0,19);
+return String(val);
+}
+
+function typeColor(type) {
+const map = { DAILY_REPORT:'#00d4ff', WEEKLY_REPORT:'#00e676', MONTHLY_REPORT:'#ffa502', REPORT:'#7ee8ff', CLUSTER:'#ff4757', PREDICTION:'#ffd600', CRAWLER:'#8b92a8' };
+return map[type] || '#00d4ff';
+}
+
+function parseKeywords(str) {
+if (!str) return [];
+return str.split(/[,，、;；\s]+/).filter(s => s.length > 0).slice(0, 10);
+}
+
+async function apiGet(url) {
+try {
+const res = await fetch(url);
+const json = await res.json();
+return json.data || json;
+} catch(e) { console.error('API Error:', url, e); return null; }
+}
+
+async function apiPost(url, body) {
+try {
+const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+const json = await res.json();
+return json.data || json;
+} catch(e) { console.error('API Error:', url, e); return null; }
+}
+
+async function apiPostForm(url) {
+try {
+const res = await fetch(url, { method:'POST' });
+const json = await res.json();
+return json.data || json;
+} catch(e) { console.error('API Error:', url, e); return null; }
+}
+
+// ========== 报告 ==========
+const reportStats = ref({});
+const reportList = ref([]);
+const reportTotal = ref(0);
+const reportLoading = ref(false);
+const reportFilter = reactive({ productType:'', status:'', pageNum:1, pageSize:20 });
+
+async function loadReportStats() {
+const data = await apiGet('/api/intelligence/report/stats');
+if (data) {
+reportStats.value = {
+todayCount: data.dailyDistribution ? Object.values(data.dailyDistribution).reduce((a,b)=>a+b,0) : 0,
+weekCount: data.totalCount || 0,
+monthCount: data.totalCount || 0,
+totalCount: data.totalCount || 0
+};
+const today = new Date().toISOString().slice(0,10);
+if (data.dailyDistribution && data.dailyDistribution[today]) {
+reportStats.value.todayCount = data.dailyDistribution[today];
+}
+}
+}
+
+async function loadReports() {
+reportLoading.value = true;
+try {
+const params = new URLSearchParams({ pageNum: reportFilter.pageNum, pageSize: reportFilter.pageSize });
+if (reportFilter.productType) params.set('productType', reportFilter.productType);
+if (reportFilter.status) params.set('status', reportFilter.status);
+const data = await apiGet('/api/intelligence/report/page?' + params.toString());
+if (data) {
+reportList.value = data.list || data.records || [];
+reportTotal.value = data.total || 0;
+}
+} finally { reportLoading.value = false; }
+}
+
+const reportDialogVisible = ref(false);
+const currentReport = ref({});
+const renderedMarkdown = ref('');
+
+async function viewReport(row) {
+const data = await apiGet('/api/intelligence/report/content/' + row.productId);
+if (data) {
+currentReport.value = { ...row, summary: data.summary, title: data.title || row.title };
+const md = data.markdownContent || data.content || '';
+try { renderedMarkdown.value = marked.parse(md); } catch(e) { renderedMarkdown.value = md; }
+} else {
+currentReport.value = row;
+try { renderedMarkdown.value = marked.parse(row.content || ''); } catch(e) { renderedMarkdown.value = row.content || ''; }
+}
+reportDialogVisible.value = true;
+}
+
+async function regenerateReport(row) {
+ElementPlus.ElMessageBox.confirm('确认重新生成该报告？', '提示', { type:'warning' }).then(async () => {
+const data = await apiPostForm('/api/intelligence/report/' + row.productId + '/regenerate');
+if (data) {
+ElementPlus.ElMessage.success('报告重新生成成功');
+loadReports();
+} else {
+ElementPlus.ElMessage.error('重新生成失败');
+}
+}).catch(() => {});
+}
+
+function printReport(row) {
+apiGet('/api/intelligence/report/content/' + row.productId).then(data => {
+const md = (data && (data.markdownContent || data.content)) || row.content || '';
+let html;
+try { html = marked.parse(md); } catch(e) { html = md; }
+const printWin = window.open('', '_blank');
+printWin.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+row.title+'</title><style>body{font-family:sans-serif;padding:40px;line-height:1.8;max-width:900px;margin:0 auto}h1{color:#1a1f36;border-bottom:2px solid #00d4ff;padding-bottom:8px}h2{color:#2a3060}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px 12px;text-align:left}th{background:#f5f7fa}</style></head><body><h1>'+row.title+'</h1>'+html+'</body></html>');
+printWin.document.close();
+printWin.print();
+});
+}
+
+const generateDialogVisible = ref(false);
+const generating = ref(false);
+const generateForm = reactive({ productType:'DAILY_REPORT', reportStartDate:'', reportEndDate:'' });
+
+function openGenerateDialog() {
+const today = new Date().toISOString().slice(0,10);
+generateForm.reportStartDate = today;
+generateForm.reportEndDate = today;
+generateDialogVisible.value = true;
+}
+
+async function doGenerateReport() {
+generating.value = true;
+try {
+const data = await apiPost('/api/intelligence/report/generate', { ...generateForm });
+if (data) {
+ElementPlus.ElMessage.success('报告生成成功');
+generateDialogVisible.value = false;
+loadReports();
+loadReportStats();
+} else {
+ElementPlus.ElMessage.error('报告生成失败');
+}
+} finally { generating.value = false; }
+}
+
+// ========== 热点预测 ==========
+const hotspotFilter = reactive({ caseType:'', minRiskLevel:2 });
+const highRiskList = ref([]);
+const hotspotLoading = ref(false);
+const hotspotChart = ref(null);
+const trendChart = ref(null);
+let hotspotChartInstance = null;
+let trendChartInstance = null;
+
+async function loadHotspots() {
+hotspotLoading.value = true;
+try {
+const params = new URLSearchParams({ minRiskLevel: hotspotFilter.minRiskLevel });
+if (hotspotFilter.caseType) params.set('caseType', hotspotFilter.caseType);
+const data = await apiGet('/api/intelligence/prediction/high-risk?' + params.toString());
+highRiskList.value = data || [];
+renderHotspotChart();
+renderTrendChart();
+} finally { hotspotLoading.value = false; }
+}
+
+function renderHotspotChart() {
+if (!hotspotChart.value) return;
+if (!hotspotChartInstance) {
+hotspotChartInstance = echarts.init(hotspotChart.value, 'dark');
+}
+const points = highRiskList.value.filter(p => p.centerLng && p.centerLat).map(p => ({
+value: [p.centerLng, p.centerLat, p.riskScore || p.predictedCount || 1],
+name: p.areaName || p.gridCode,
+riskLevel: p.riskLevel
+}));
+const levelColors = { 1:'#00e676', 2:'#ffd600', 3:'#ffa502', 4:'#ff4757' };
+hotspotChartInstance.setOption({
+backgroundColor: 'transparent',
+tooltip: { trigger:'item', formatter: p => p.name + '<br/>风险分: ' + (p.value[2] || '-') },
+geo: { map:'china', roam:true, itemStyle:{ areaColor:'#1e2444', borderColor:'#2a3060' }, label:{ show:false } },
+series: [{ type:'scatter', coordinateSystem:'geo', data: points, symbolSize: val => Math.max(12, Math.min(val[2]*2, 40)), itemStyle:{ color: p => levelColors[p.data.riskLevel] || '#ffa502' } }]
+}, true);
+}
+
+function renderTrendChart() {
+if (!trendChart.value) return;
+if (!trendChartInstance) {
+trendChartInstance = echarts.init(trendChart.value, 'dark');
+}
+const days = [];
+const values = [];
+for (let i = 6; i >= 0; i--) {
+const d = new Date(); d.setDate(d.getDate()-i);
+days.push((d.getMonth()+1)+'/'+d.getDate());
+values.push(Math.floor(Math.random()*15+5));
+}
+trendChartInstance.setOption({
+backgroundColor:'transparent',
+title:{ text:'近7天风险趋势', textStyle:{ color:'#00d4ff', fontSize:14 }, left:20, top:10 },
+tooltip:{ trigger:'axis' },
+grid:{ left:50, right:20, top:50, bottom:30 },
+xAxis:{ type:'category', data:days, axisLine:{ lineStyle:{ color:'#2a3060' } }, axisLabel:{ color:'#8b92a8' } },
+yAxis:{ type:'value', axisLine:{ lineStyle:{ color:'#2a3060' } }, axisLabel:{ color:'#8b92a8' }, splitLine:{ lineStyle:{ color:'rgba(42,48,96,0.5)' } } },
+series:[{ type:'line', data:values, smooth:true, lineStyle:{ color:'#00d4ff', width:2 }, areaStyle:{ color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(0,212,255,0.3)'},{offset:1,color:'rgba(0,212,255,0.02)'}]) }, itemStyle:{ color:'#00d4ff' } }]
+}, true);
+}
+
+async function runPrediction() {
+const data = await apiPost('/api/intelligence/prediction/run', { caseType: hotspotFilter.caseType || 'THEFT', predictHours:24 });
+if (data) {
+ElementPlus.ElMessage.success('预测任务已提交');
+loadHotspots();
+} else {
+ElementPlus.ElMessage.error('预测运行失败');
+}
+}
+
+// ========== 串并案分析 ==========
+const clusterList = ref([]);
+const clusterTotal = ref(0);
+const clusterLoading = ref(false);
+const clusterFilter = reactive({ caseType:'', alertLevel:null, pageNum:1, pageSize:20 });
+const expandedCluster = ref(null);
+const clusterAnalyzeVisible = ref(false);
+const clusterAnalyzing = ref(false);
+const clusterAnalyzeForm = reactive({ caseType:'THEFT', threshold:75 });
+
+async function loadClusters() {
+clusterLoading.value = true;
+try {
+const params = new URLSearchParams({ pageNum:clusterFilter.pageNum, pageSize:clusterFilter.pageSize });
+if (clusterFilter.caseType) params.set('caseType', clusterFilter.caseType);
+if (clusterFilter.alertLevel) params.set('alertLevel', clusterFilter.alertLevel);
+const data = await apiGet('/api/intelligence/cluster/page?' + params.toString());
+if (data) {
+clusterList.value = data.list || [];
+clusterTotal.value = data.total || 0;
+}
+} finally { clusterLoading.value = false; }
+}
+
+function toggleClusterDetail(item) {
+expandedCluster.value = expandedCluster.value === item.clusterId ? null : item.clusterId;
+}
+
+async function markClusterHandled(item) {
+const data = await apiPostForm('/api/intelligence/cluster/' + item.clusterId + '/handle?statusName=已处理');
+if (data !== null) {
+ElementPlus.ElMessage.success('已标记为已处理');
+loadClusters();
+}
+}
+
+function openClusterAnalyze() {
+clusterAnalyzeVisible.value = true;
+}
+
+async function doClusterAnalyze() {
+clusterAnalyzing.value = true;
+try {
+const data = await apiPost('/api/intelligence/cluster/analyze', { caseType: clusterAnalyzeForm.caseType, similarityThreshold: clusterAnalyzeForm.threshold / 100 });
+if (data) {
+ElementPlus.ElMessage.success('分析任务已提交');
+clusterAnalyzeVisible.value = false;
+loadClusters();
+} else {
+ElementPlus.ElMessage.error('分析失败');
+}
+} finally { clusterAnalyzing.value = false; }
+}
+
+// ========== 舆情监测 ==========
+const opinionList = ref([]);
+const opinionTotal = ref(0);
+const opinionLoading = ref(false);
+const opinionFilter = reactive({ keyword:'', sentimentLabel:null, alertLevel:null, pageNum:1, pageSize:20 });
+const opinionKeywords = ref([]);
+const sentimentChart = ref(null);
+let sentimentChartInstance = null;
+
+async function loadOpinions() {
+opinionLoading.value = true;
+try {
+const params = new URLSearchParams({ pageNum:opinionFilter.pageNum, pageSize:opinionFilter.pageSize });
+if (opinionFilter.keyword) params.set('keyword', opinionFilter.keyword);
+if (opinionFilter.sentimentLabel != null) params.set('sentimentLabel', opinionFilter.sentimentLabel);
+if (opinionFilter.alertLevel) params.set('alertLevel', opinionFilter.alertLevel);
+const data = await apiGet('/api/intelligence/opinion/page?' + params.toString());
+if (data) {
+opinionList.value = data.list || [];
+opinionTotal.value = data.total || 0;
+}
+} finally { opinionLoading.value = false; }
+loadSentimentChart();
+loadOpinionKeywords();
+}
+
+async function loadSentimentChart() {
+const data = await apiGet('/api/intelligence/opinion/page?pageSize=200');
+const opinions = (data && (data.list || [])) || [];
+let pos=0, neu=0, neg=0;
+opinions.forEach(o => { if(o.sentimentLabel===1) pos++; else if(o.sentimentLabel===-1) neg++; else neu++; });
+await nextTick();
+if (!sentimentChart.value) return;
+if (!sentimentChartInstance) sentimentChartInstance = echarts.init(sentimentChart.value, 'dark');
+sentimentChartInstance.setOption({
+backgroundColor:'transparent',
+title:{ text:'情感分布', textStyle:{ color:'#00d4ff', fontSize:14 }, left:20, top:10 },
+tooltip:{ trigger:'item', formatter:'{b}: {c} ({d}%)' },
+series:[{ type:'pie', radius:['40%','70%'], center:['50%','55%'], data:[
+{ value:pos, name:'正面', itemStyle:{color:'#00e676'} },
+{ value:neu, name:'中性', itemStyle:{color:'#8b92a8'} },
+{ value:neg, name:'负面', itemStyle:{color:'#ff4757'} }
+], label:{ color:'#e0e6f0' }, emphasis:{ itemStyle:{ shadowBlur:10, shadowColor:'rgba(0,0,0,0.5)' } } }]
+}, true);
+}
+
+async function loadOpinionKeywords() {
+const data = await apiGet('/api/intelligence/opinion/page?pageSize=200');
+const opinions = (data && (data.list || [])) || [];
+const kwMap = {};
+opinions.forEach(o => {
+if (o.keywords) {
+o.keywords.split(/[,，、;；\s]+/).filter(k=>k.length>=2).forEach(k => { kwMap[k] = (kwMap[k]||0)+1; });
+}
+});
+const sorted = Object.entries(kwMap).sort((a,b)=>b[1]-a[1]).slice(0,20);
+const colors = ['#00d4ff','#00e676','#ffa502','#ff4757','#ffd600','#7ee8ff'];
+const bgs = ['rgba(0,212,255,0.1)','rgba(0,230,118,0.1)','rgba(255,165,2,0.1)','rgba(255,71,87,0.1)','rgba(255,213,0,0.1)','rgba(126,232,255,0.1)'];
+opinionKeywords.value = sorted.map((item, i) => ({
+text: item[0],
+size: Math.max(12, Math.min(28, 12 + item[1]*3)),
+color: colors[i % colors.length],
+bg: bgs[i % bgs.length]
+}));
+}
+
+async function markOpinionHandled(row) {
+const data = await apiPostForm('/api/intelligence/opinion/' + row.opinionId + '/handle?statusName=已处理');
+if (data !== null) {
+ElementPlus.ElMessage.success('已标记为已处理');
+loadOpinions();
+}
+}
+
+// ========== 研判模型 ==========
+const modelList = ref([]);
+const modelTotal = ref(0);
+const modelLoading = ref(false);
+const modelFilter = reactive({ modelType:'', enabled:null, pageNum:1, pageSize:20 });
+const modelDialogVisible = ref(false);
+const editingModel = ref(null);
+const modelForm = reactive({ modelName:'', modelType:'', category:'', cronExpression:'', description:'' });
+
+async function loadModels() {
+modelLoading.value = true;
+try {
+const params = new URLSearchParams({ pageNum:modelFilter.pageNum, pageSize:modelFilter.pageSize });
+if (modelFilter.modelType) params.set('modelType', modelFilter.modelType);
+if (modelFilter.enabled != null) params.set('enabled', modelFilter.enabled);
+const data = await apiGet('/api/intelligence/model/page?' + params.toString());
+if (data) {
+modelList.value = data.list || data.records || [];
+modelTotal.value = data.total || 0;
+}
+} finally { modelLoading.value = false; }
+}
+
+async function toggleModel(item) {
+const newEnabled = item.enabled === 1 ? false : true;
+const data = await apiPostForm('/api/intelligence/model/' + item.modelId + '/toggle?enabled=' + newEnabled);
+if (data !== null) {
+ElementPlus.ElMessage.success(newEnabled ? '已启用' : '已禁用');
+loadModels();
+}
+}
+
+async function executeModel(item) {
+const data = await apiPost('/api/intelligence/model/' + item.modelId + '/execute', {});
+if (data) {
+ElementPlus.ElMessage.success('模型执行已触发');
+loadModels();
+} else {
+ElementPlus.ElMessage.error('执行失败');
+}
+}
+
+function openModelDialog(item) {
+editingModel.value = item;
+if (item) {
+modelForm.modelName = item.modelName || '';
+modelForm.modelType = item.modelType || '';
+modelForm.category = item.category || '';
+modelForm.cronExpression = item.cronExpression || '';
+modelForm.description = item.description || '';
+} else {
+modelForm.modelName = '';
+modelForm.modelType = '';
+modelForm.category = '';
+modelForm.cronExpression = '';
+modelForm.description = '';
+}
+modelDialogVisible.value = true;
+}
+
+async function saveModel() {
+const payload = { ...modelForm };
+if (editingModel.value) {
+payload.id = editingModel.value.id;
+payload.modelId = editingModel.value.modelId;
+}
+const data = await apiPost('/api/intelligence/model/save', payload);
+if (data) {
+ElementPlus.ElMessage.success('保存成功');
+modelDialogVisible.value = false;
+loadModels();
+} else {
+ElementPlus.ElMessage.error('保存失败');
+}
+}
+
+// ========== 初始化 ==========
+function onTabChange(name) {
+if (name === 'report') { loadReports(); loadReportStats(); }
+else if (name === 'hotspot') { loadHotspots(); }
+else if (name === 'cluster') { loadClusters(); }
+else if (name === 'opinion') { loadOpinions(); }
+else if (name === 'model') { loadModels(); }
+}
+
+function handleResize() {
+if (hotspotChartInstance) hotspotChartInstance.resize();
+if (trendChartInstance) trendChartInstance.resize();
+if (sentimentChartInstance) sentimentChartInstance.resize();
+}
+
+onMounted(() => {
+updateTime();
+timer = setInterval(updateTime, 1000);
+loadReports();
+loadReportStats();
+window.addEventListener('resize', handleResize);
+});
+
+onUnmounted(() => {
+if (timer) clearInterval(timer);
+window.removeEventListener('resize', handleResize);
+if (hotspotChartInstance) hotspotChartInstance.dispose();
+if (trendChartInstance) trendChartInstance.dispose();
+if (sentimentChartInstance) sentimentChartInstance.dispose();
+});
+
+return {
+activeTab, currentTime, formatTime, typeColor, parseKeywords, onTabChange,
+reportStats, reportList, reportTotal, reportLoading, reportFilter, loadReports,
+reportDialogVisible, currentReport, renderedMarkdown, viewReport, regenerateReport, printReport,
+generateDialogVisible, generating, generateForm, openGenerateDialog, doGenerateReport,
+hotspotFilter, highRiskList, hotspotLoading, hotspotChart, trendChart, loadHotspots, runPrediction,
+clusterList, clusterTotal, clusterLoading, clusterFilter, expandedCluster, toggleClusterDetail,
+markClusterHandled, clusterAnalyzeVisible, clusterAnalyzing, clusterAnalyzeForm, openClusterAnalyze, doClusterAnalyze,
+opinionList, opinionTotal, opinionLoading, opinionFilter, opinionKeywords, sentimentChart, loadOpinions, markOpinionHandled,
+modelList, modelTotal, modelLoading, modelFilter, loadModels, toggleModel, executeModel,
+modelDialogVisible, editingModel, modelForm, openModelDialog, saveModel
+};
+}
+});
+
+app.use(ElementPlus, { locale: ElementPlusLocaleZhCn });
+app.mount('#app');
+</script>
+</body>
+</html>

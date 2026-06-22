@@ -4,9 +4,9 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.police.vision.control.config.intelligence.DeepSeekConfig;
-import com.police.vision.control.dto.ReportGenerateDTO;
-import com.police.vision.control.dto.SentimentAnalysisDTO;
-import com.police.vision.control.dto.SentimentResultDTO;
+import com.police.vision.control.dto.intelligence.ReportGenerateDTO;
+import com.police.vision.control.dto.intelligence.SentimentAnalysisDTO;
+import com.police.vision.control.dto.intelligence.SentimentResultDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
@@ -19,6 +19,7 @@ import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.util.Timeout;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -125,10 +126,10 @@ public class DeepSeekService {
         String userPrompt = buildReportUserPrompt(dto, multiSourceData);
         String result = chat(systemPrompt, userPrompt);
         if (result == null) {
-            log.error("情报产品报告生成失败，eventId={}", dto.getEventId());
+            log.error("情报产品报告生成失败，productType={}", dto.getProductType());
         } else {
-            log.info("情报产品报告生成成功，eventId={}, reportName={}",
-                    dto.getEventId(), dto.getReportName());
+            log.info("情报产品报告生成成功，productType={}, areaCode={}",
+                    dto.getProductType(), dto.getAreaCode());
         }
         return result;
     }
@@ -158,9 +159,14 @@ public class DeepSeekService {
 
     private String buildReportUserPrompt(ReportGenerateDTO dto, Map<String, Object> multiSourceData) {
         StringBuilder sb = new StringBuilder();
-        sb.append("报告名称：").append(dto.getReportName()).append("\n");
-        sb.append("事件ID：").append(dto.getEventId()).append("\n\n");
-        sb.append("以下是多源数据（JSON格式）：\n");
+        sb.append("报告类型：").append(dto.getProductType()).append("\n");
+        if (dto.getReportStartDate() != null && dto.getReportEndDate() != null) {
+            sb.append("统计周期：").append(dto.getReportStartDate()).append(" 至 ").append(dto.getReportEndDate()).append("\n");
+        }
+        if (dto.getAreaCode() != null) {
+            sb.append("区域编码：").append(dto.getAreaCode()).append("\n");
+        }
+        sb.append("\n以下是多源数据（JSON格式）：\n");
         sb.append("```json\n");
         sb.append(JSON.toJSONString(multiSourceData));
         sb.append("\n```\n\n");
@@ -183,8 +189,20 @@ public class DeepSeekService {
             JSONObject json = JSON.parseObject(jsonStr);
 
             SentimentResultDTO result = new SentimentResultDTO();
-            result.setSentimentLabel(json.getString("sentimentLabel"));
-            result.setSentimentScore(json.getDouble("sentimentScore"));
+            String labelStr = json.getString("sentimentLabel");
+            int labelValue = 1;
+            if ("positive".equalsIgnoreCase(labelStr) || "2".equals(labelStr)) {
+                labelValue = 2;
+            } else if ("negative".equalsIgnoreCase(labelStr) || "0".equals(labelStr)) {
+                labelValue = 0;
+            } else {
+                labelValue = 1;
+            }
+            result.setSentimentLabel(labelValue);
+            Double scoreVal = json.getDouble("sentimentScore");
+            if (scoreVal != null) {
+                result.setSentimentScore(BigDecimal.valueOf(scoreVal));
+            }
             result.setKeywords(json.getList("keywords", String.class));
             result.setTopics(json.getList("topics", String.class));
             result.setSummary(json.getString("summary"));

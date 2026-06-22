@@ -35,7 +35,7 @@ public class ElasticsearchConfig {
 
     private int socketTimeout = 60000;
 
-    private String caseIndex = "police_cases";
+    private String caseIndex = "police_case_info";
 
     private String opinionIndex = "public_opinion";
 
