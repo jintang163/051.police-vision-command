@@ -46,3 +46,71 @@ control:
     window-minutes: 10
   personnel:
       portrait-days: 30
+
+# xxl-job 配置
+xxl:
+  job:
+    enabled: true
+    admin-addresses: http://127.0.0.1:8080/xxl-job-admin
+    access-token: default_token
+    executor:
+      appname: police-vision-control-executor
+      ip:
+      port: 9999
+      logpath: ./logs/xxl-job/jobhandler
+      logretentiondays: 30
+
+# DeepSeek 大模型配置
+deepseek:
+  enabled: true
+  api-url: https://api.deepseek.com/v1/chat/completions
+  api-key: sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  model: deepseek-chat
+  max-tokens: 4096
+  temperature: 0.7
+  top-p: 0.9
+  connect-timeout: 30
+  read-timeout: 120
+  retry-count: 3
+
+# Elasticsearch 配置
+elasticsearch:
+  enabled: true
+  hosts:
+    - 127.0.0.1:9200
+  scheme: http
+  username:
+  password:
+  connect-timeout: 5000
+  socket-timeout: 60000
+  case-index: police_cases
+  opinion-index: public_opinion
+
+# 情报研判中心配置
+intelligence:
+  report:
+    daily-cron: "0 0 6 * * ?"
+    weekly-cron: "0 0 7 ? * MON"
+    monthly-cron: "0 0 8 1 * ?"
+    history-days: 30
+    auto-generate: true
+  crawler:
+    default-thread-count: 5
+    default-crawl-depth: 3
+    default-sleep-millis: 1000
+    default-timeout-seconds: 30
+    user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    auto-sentiment: true
+  cluster:
+    similarity-threshold: 0.75
+    time-window-hours: 72
+    min-cluster-size: 2
+    max-clusters: 100
+    default-cron: "0 0 */4 * * ?"
+  prediction:
+    predict-hours: 24
+    history-days: 90
+    grid-size-meters: 500
+    risk-threshold: 0.6
+    default-cron: "0 0 5 * * ?"
+    sarima-auto-tune: true
