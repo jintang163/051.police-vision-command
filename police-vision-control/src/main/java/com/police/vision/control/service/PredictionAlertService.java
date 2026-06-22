@@ -2,10 +2,13 @@ package com.police.vision.control.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.police.vision.common.constant.MqConstant;
+import com.police.vision.common.util.GpsUtil;
 import com.police.vision.common.util.MqUtil;
+import com.police.vision.control.entity.AggregationAlert;
 import com.police.vision.control.entity.PredictionAlert;
 import com.police.vision.control.entity.TargetPerson;
 import com.police.vision.control.entity.TrajectoryPrediction;
+import com.police.vision.control.mapper.AggregationAlertMapper;
 import com.police.vision.control.mapper.PredictionAlertMapper;
 import com.police.vision.control.mapper.TargetPersonMapper;
 import com.police.vision.control.mapper.TrajectoryPredictionMapper;
@@ -29,6 +32,7 @@ public class PredictionAlertService {
     private final TrajectoryPredictionMapper predictionMapper;
     private final TargetPersonMapper targetPersonMapper;
     private final GeoFenceService geoFenceService;
+    private final AggregationAlertMapper aggregationAlertMapper;
     private final MqUtil mqUtil;
 
     private static final String ALERT_TYPE_SENSITIVE = "SENSITIVE_AREA";
@@ -96,6 +100,19 @@ public class PredictionAlertService {
     private PredictionAlert buildAlert(TrajectoryPrediction pred, TargetPerson person,
                                        String alertType, String alertTypeName, int alertLevel,
                                        String reason) {
+        Map<String, Object> realCrowdData = queryRealCrowdData(
+                pred.getLongitude().doubleValue(), pred.getLatitude().doubleValue(), 500);
+        int realCrowdCount = (int) realCrowdData.getOrDefault("totalPersonCount", 0);
+        int realTargetCount = (int) realCrowdData.getOrDefault("targetPersonCount", 0);
+        int realCrowdRisk = (int) realCrowdData.getOrDefault("crowdRiskLevel", 0);
+        boolean hasRealCrowd = realCrowdCount > 0;
+
+        if (hasRealCrowd) {
+            if (realCrowdCount >= 50) alertLevel = Math.max(alertLevel, 4);
+            else if (realCrowdCount >= 30) alertLevel = Math.max(alertLevel, 3);
+            else if (realCrowdCount >= 15) alertLevel = Math.max(alertLevel, 2);
+        }
+
         PredictionAlert alert = new PredictionAlert();
         alert.setAlertId(UUID.randomUUID().toString().replace("-", ""));
         alert.setAlertNo("PA" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
@@ -114,11 +131,12 @@ public class PredictionAlertService {
         alert.setPredictTime(pred.getPredictTime());
         alert.setPredictionId(pred.getPredictionId());
         alert.setPredictionBatch(pred.getPredictionBatch());
-        alert.setTriggerReason(reason);
+        alert.setTriggerReason(reason + (hasRealCrowd ? "（实时聚集" + realCrowdCount + "人）" : ""));
         alert.setSensitiveAreaName(pred.getLocationDesc());
         alert.setSensitiveAreaType(pred.getSensitiveAreaType());
-        alert.setCrowdCount(pred.getCrowdRiskLevel() != null ? pred.getCrowdRiskLevel() * 5 : 0);
-        alert.setTargetPersonCount(1);
+        alert.setCrowdCount(hasRealCrowd ? realCrowdCount :
+                (pred.getCrowdRiskLevel() != null ? pred.getCrowdRiskLevel() * 5 : 0));
+        alert.setTargetPersonCount(hasRealCrowd ? realTargetCount : 1);
         alert.setStatus(0);
         alert.setStatusName("待处理");
         alert.setPoliceStationCode(person != null ? person.getPoliceStationCode() : null);
@@ -136,26 +154,99 @@ public class PredictionAlertService {
             pushMsg.put("alertLevel", alert.getAlertLevel());
             pushMsg.put("personId", alert.getPersonId());
             pushMsg.put("personName", alert.getPersonName());
+            pushMsg.put("personType", alert.getPersonType());
+            pushMsg.put("controlLevel", alert.getControlLevel());
             pushMsg.put("longitude", alert.getLongitude());
             pushMsg.put("latitude", alert.getLatitude());
             pushMsg.put("locationDesc", alert.getLocationDesc());
             pushMsg.put("probability", alert.getProbability());
             pushMsg.put("predictTime", alert.getPredictTime());
             pushMsg.put("triggerReason", alert.getTriggerReason());
+            pushMsg.put("sensitiveAreaName", alert.getSensitiveAreaName());
+            pushMsg.put("sensitiveAreaType", alert.getSensitiveAreaType());
+            pushMsg.put("crowdCount", alert.getCrowdCount());
+            pushMsg.put("targetPersonCount", alert.getTargetPersonCount());
             pushMsg.put("policeStationCode", alert.getPoliceStationCode());
+            pushMsg.put("policeStationName", alert.getPoliceStationName());
             pushMsg.put("timestamp", System.currentTimeMillis());
-
-            mqUtil.send(MqConstant.CONTROL_TOPIC + ":" + MqConstant.TAG_ALARM, pushMsg);
 
             Map<String, Object> wsMsg = new LinkedHashMap<>();
             wsMsg.put("type", "PREDICTION_ALERT");
             wsMsg.put("data", pushMsg);
-            mqUtil.send(MqConstant.WEBSOCKET_PUSH_TOPIC + ":prediction_alert", wsMsg);
+            wsMsg.put("timestamp", System.currentTimeMillis());
+
+            mqUtil.send(MqConstant.CONTROL_TOPIC + ":" + MqConstant.TAG_PREDICTION_ALERT, wsMsg);
 
             log.info("轨迹预测预警推送完成：alertId={}, alertType={}, person={}",
                     alert.getAlertId(), alert.getAlertType(), alert.getPersonName());
         } catch (Exception e) {
             log.error("轨迹预测预警推送失败：alertId={}", alert.getAlertId(), e);
+        }
+    }
+
+    private Map<String, Object> queryRealCrowdData(double lng, double lat, int radiusMeters) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("totalPersonCount", 0);
+        result.put("targetPersonCount", 0);
+        result.put("crowdRiskLevel", 0);
+        result.put("hasRealData", false);
+
+        try {
+            LocalDateTime startTime = LocalDateTime.now().minusMinutes(30);
+            LocalDateTime endTime = LocalDateTime.now();
+            List<AggregationAlert> nearbyAlerts = aggregationAlertMapper.selectByTimeRange(startTime, endTime, 1);
+
+            if (nearbyAlerts != null && !nearbyAlerts.isEmpty()) {
+                AggregationAlert bestMatch = null;
+                double minDistance = Double.MAX_VALUE;
+
+                for (AggregationAlert alert : nearbyAlerts) {
+                    if (alert.getCenterLongitude() == null || alert.getCenterLatitude() == null) continue;
+                    double dist = GpsUtil.getDistance(
+                            alert.getCenterLongitude().doubleValue(),
+                            alert.getCenterLatitude().doubleValue(),
+                            lng, lat);
+                    if (dist * 1000 <= radiusMeters && dist < minDistance) {
+                        minDistance = dist;
+                        bestMatch = alert;
+                    }
+                }
+
+                if (bestMatch != null) {
+                    int total = bestMatch.getTotalPersonCount() != null ? bestMatch.getTotalPersonCount() : 0;
+                    int targets = bestMatch.getTargetPersonCount() != null ? bestMatch.getTargetPersonCount() : 0;
+                    int riskLevel;
+                    if (total >= 50) riskLevel = 4;
+                    else if (total >= 30) riskLevel = 3;
+                    else if (total >= 15) riskLevel = 2;
+                    else if (total >= 5) riskLevel = 1;
+                    else riskLevel = 0;
+
+                    result.put("totalPersonCount", total);
+                    result.put("targetPersonCount", targets);
+                    result.put("crowdRiskLevel", riskLevel);
+                    result.put("hasRealData", true);
+                    result.put("aggregationAlertId", bestMatch.getAlertId());
+                    result.put("areaName", bestMatch.getAreaName());
+                    result.put("distanceMeters", Math.round(minDistance * 1000));
+                    log.debug("匹配到真实聚集数据：total={}, targets={}, distance={}m",
+                            total, targets, Math.round(minDistance * 1000));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("查询真实聚集数据失败，使用模拟数据: lng={}, lat={}", lng, lat, e);
+        }
+        return result;
+    }
+
+    public int syncCrowdDataFromAggregation() {
+        try {
+            int updated = alertMapper.updateCrowdDataFromAggregation();
+            log.info("已同步{}条预警的真实聚集数据", updated);
+            return updated;
+        } catch (Exception e) {
+            log.error("同步聚集数据失败", e);
+            return 0;
         }
     }
 

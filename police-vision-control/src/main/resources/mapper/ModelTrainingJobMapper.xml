@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.control.mapper.ModelTrainingJobMapper">
+
+    <select id="selectByJobId" resultType="com.police.vision.control.entity.ModelTrainingJob">
+        SELECT * FROM model_training_job
+        WHERE job_id = #{jobId} LIMIT 1
+    </select>
+
+    <select id="selectLatestDeployedModel" resultType="com.police.vision.control.entity.ModelTrainingJob">
+        SELECT * FROM model_training_job
+        WHERE model_type = #{modelType}
+          AND status = 'SUCCESS'
+          AND deployed = 1
+          AND deleted = 0
+        ORDER BY created_at DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectByModelType" resultType="com.police.vision.control.entity.ModelTrainingJob">
+        SELECT * FROM model_training_job
+        WHERE model_type = #{modelType}
+          AND deleted = 0
+        ORDER BY created_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="getLatestAccuracyEstimate" resultType="java.lang.Double">
+        SELECT accuracy_estimate
+        FROM model_training_job
+        WHERE model_type = #{modelType}
+          AND status = 'SUCCESS'
+          AND deployed = 1
+          AND accuracy_estimate IS NOT NULL
+          AND deleted = 0
+        ORDER BY created_at DESC
+        LIMIT 1
+    </select>
+
+    <update id="updateDeployedStatus">
+        UPDATE model_training_job
+        SET deployed = #{deployed},
+            deploy_time = #{deployed} = 1 ? NOW() : NULL,
+            update_time = NOW()
+        WHERE model_version = #{modelVersion}
+          AND deleted = 0
+    </update>
+
+</mapper>

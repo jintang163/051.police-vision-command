@@ -11,6 +11,8 @@ import java.util.List;
 @Mapper
 public interface PredictionAlertMapper extends BaseMapper<PredictionAlert> {
 
+    PredictionAlert selectByAlertId(@Param("alertId") String alertId);
+
     List<PredictionAlert> selectByStatus(@Param("status") Integer status);
 
     List<PredictionAlert> selectByPersonId(@Param("personId") String personId);
@@ -24,4 +26,6 @@ public interface PredictionAlertMapper extends BaseMapper<PredictionAlert> {
     List<PredictionAlert> selectUnhandledHighRisk(
             @Param("alertLevel") Integer minAlertLevel
     );
+
+    int updateCrowdDataFromAggregation();
 }

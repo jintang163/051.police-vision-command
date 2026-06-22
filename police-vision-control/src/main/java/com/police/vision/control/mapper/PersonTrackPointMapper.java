@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface PersonTrackPointMapper extends BaseMapper<PersonTrackPoint> {
@@ -26,5 +27,14 @@ public interface PersonTrackPointMapper extends BaseMapper<PersonTrackPoint> {
     List<PersonTrackPoint> selectRealtimeByPersonIds(
             @Param("personIds") List<String> personIds,
             @Param("minutes") Integer minutes
+    );
+
+    int batchInsertTrackPoints(@Param("list") List<PersonTrackPoint> list);
+
+    int cleanOldTrackPoints(@Param("days") Integer days, @Param("limit") Integer limit);
+
+    List<Map<String, Object>> getTrackStatistics(
+            @Param("personId") String personId,
+            @Param("days") Integer days
     );
 }

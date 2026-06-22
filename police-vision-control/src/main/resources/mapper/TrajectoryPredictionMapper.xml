@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.control.mapper.TrajectoryPredictionMapper">
+
+    <select id="selectLatestByPersonId" resultType="com.police.vision.control.entity.TrajectoryPrediction">
+        SELECT
+            id, prediction_id, person_id, person_name, prediction_batch, prediction_rank,
+            longitude, latitude, location_desc, probability, predict_minutes_ahead,
+            predict_time, predict_window_start, predict_window_end, area_code, area_name,
+            is_sensitive_area, sensitive_area_type, crowd_risk_level, model_version,
+            confidence, feature_snapshot, status, create_time, update_time
+        FROM trajectory_prediction
+        WHERE person_id = #{personId}
+          AND deleted = 0
+        ORDER BY predict_time DESC, prediction_rank ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectByBatch" resultType="com.police.vision.control.entity.TrajectoryPrediction">
+        SELECT
+            id, prediction_id, person_id, person_name, prediction_batch, prediction_rank,
+            longitude, latitude, location_desc, probability, predict_minutes_ahead,
+            predict_time, predict_window_start, predict_window_end, area_code, area_name,
+            is_sensitive_area, sensitive_area_type, crowd_risk_level, model_version,
+            confidence, feature_snapshot, status, create_time, update_time
+        FROM trajectory_prediction
+        WHERE prediction_batch = #{predictionBatch}
+          AND deleted = 0
+        ORDER BY prediction_rank ASC
+    </select>
+
+    <select id="selectHighRiskPredictions" resultType="com.police.vision.control.entity.TrajectoryPrediction">
+        SELECT
+            id, prediction_id, person_id, person_name, prediction_batch, prediction_rank,
+            longitude, latitude, location_desc, probability, predict_minutes_ahead,
+            predict_time, predict_window_start, predict_window_end, area_code, area_name,
+            is_sensitive_area, sensitive_area_type, crowd_risk_level, model_version,
+            confidence, feature_snapshot, status, create_time, update_time
+        FROM trajectory_prediction
+        WHERE probability >= #{minProbability}
+          <if test="sensitiveOnly == 1">
+              AND is_sensitive_area = 1
+          </if>
+          <if test="sensitiveOnly == 2">
+              AND crowd_risk_level >= 2
+          </if>
+          <if test="sensitiveOnly == 3">
+              AND (is_sensitive_area = 1 OR crowd_risk_level >= 2)
+          </if>
+          AND predict_time BETWEEN #{startTime} AND #{endTime}
+          AND deleted = 0
+        ORDER BY probability DESC
+        LIMIT 100
+    </select>
+
+    <update id="updatePredictionCrowdInfo">
+        UPDATE trajectory_prediction
+        SET crowd_risk_level = #{crowdRiskLevel},
+            crowd_count = #{crowdCount},
+            update_time = NOW()
+        WHERE prediction_id = #{predictionId}
+    </update>
+
+</mapper>

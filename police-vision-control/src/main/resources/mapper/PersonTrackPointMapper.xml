@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.control.mapper.PersonTrackPointMapper">
+
+    <select id="selectByPersonIdAndTimeRange" resultType="com.police.vision.control.entity.PersonTrackPoint">
+        SELECT
+            id, track_id, person_id, person_name, longitude, latitude, altitude, speed, direction,
+            accuracy, source_type, device_id, gps_time, location_type, location_desc, extra_data,
+            create_time, update_time
+        FROM person_track_point
+        WHERE person_id = #{personId}
+          AND gps_time BETWEEN #{startTime} AND #{endTime}
+          AND deleted = 0
+        ORDER BY gps_time ASC
+    </select>
+
+    <select id="selectRecentByPersonId" resultType="com.police.vision.control.entity.PersonTrackPoint">
+        SELECT
+            id, track_id, person_id, person_name, longitude, latitude, altitude, speed, direction,
+            accuracy, source_type, device_id, gps_time, location_type, location_desc, extra_data,
+            create_time, update_time
+        FROM person_track_point
+        WHERE person_id = #{personId}
+          AND gps_time >= DATE_SUB(NOW(), INTERVAL #{days} DAY)
+          AND deleted = 0
+        ORDER BY gps_time DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectRealtimeByPersonIds" resultType="com.police.vision.control.entity.PersonTrackPoint">
+        SELECT
+            t.id, t.track_id, t.person_id, t.person_name, t.longitude, t.latitude, t.altitude,
+            t.speed, t.direction, t.accuracy, t.source_type, t.device_id, t.gps_time,
+            t.location_type, t.location_desc, t.extra_data, t.create_time, t.update_time
+        FROM person_track_point t
+        INNER JOIN (
+            SELECT person_id, MAX(gps_time) AS max_time
+            FROM person_track_point
+            WHERE person_id IN
+            <foreach collection="personIds" item="pid" open="(" separator="," close=")">
+                #{pid}
+            </foreach>
+              AND gps_time >= DATE_SUB(NOW(), INTERVAL #{minutes} MINUTE)
+              AND deleted = 0
+            GROUP BY person_id
+        ) latest ON t.person_id = latest.person_id AND t.gps_time = latest.max_time
+        WHERE t.deleted = 0
+    </select>
+
+    <insert id="batchInsertTrackPoints" parameterType="java.util.List" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO person_track_point (
+            track_id, person_id, person_name, longitude, latitude, altitude, speed, direction,
+            accuracy, source_type, device_id, gps_time, location_type, location_desc, extra_data
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.trackId}, #{item.personId}, #{item.personName}, #{item.longitude}, #{item.latitude},
+                #{item.altitude}, #{item.speed}, #{item.direction}, #{item.accuracy}, #{item.sourceType},
+                #{item.deviceId}, #{item.gpsTime}, #{item.locationType}, #{item.locationDesc}, #{item.extraData}
+            )
+        </foreach>
+    </insert>
+
+    <delete id="cleanOldTrackPoints">
+        DELETE FROM person_track_point
+        WHERE gps_time < DATE_SUB(NOW(), INTERVAL #{days} DAY)
+        LIMIT #{limit}
+    </delete>
+
+    <select id="getTrackStatistics" resultType="java.util.Map">
+        SELECT
+            person_id,
+            COUNT(*) AS total_points,
+            DATE(MIN(gps_time)) AS earliest_date,
+            DATE(MAX(gps_time)) AS latest_date,
+            COUNT(DISTINCT DATE(gps_time)) AS active_days,
+            source_type,
+            AVG(speed) AS avg_speed,
+            COUNT(DISTINCT ROUND(longitude, 3), ROUND(latitude, 3)) AS grid_count
+        FROM person_track_point
+        WHERE person_id = #{personId}
+          AND gps_time >= DATE_SUB(NOW(), INTERVAL #{days} DAY)
+          AND deleted = 0
+        GROUP BY source_type
+    </select>
+
+</mapper>

@@ -26,9 +26,11 @@ public class ControlController {
     private final TargetPersonAlertService alertService;
     private final com.police.vision.control.mapper.TargetPersonMapper targetPersonMapper;
     private final com.police.vision.control.mapper.AggregationAlertMapper aggregationAlertMapper;
+    private final com.police.vision.control.mapper.PersonTrackPointMapper personTrackPointMapper;
     private final com.police.vision.control.service.PersonTrackService personTrackService;
     private final com.police.vision.control.service.TrajectoryPredictService trajectoryPredictService;
     private final com.police.vision.control.service.PredictionAlertService predictionAlertService;
+    private final com.police.vision.control.service.ModelTrainingService modelTrainingService;
 
     // ============================ 重点人员库 ============================
 
@@ -422,5 +424,80 @@ public class ControlController {
             @RequestParam double lng,
             @RequestParam double lat) {
         return Result.success(fenceService.checkSensitiveArea(lng, lat));
+    }
+
+    // ============================ 90天GPS数据批量导入 ============================
+
+    @PostMapping("/track/batch-import")
+    public Result<Map<String, Object>> batchImportTrackPoints(
+            @RequestBody List<Map<String, Object>> trackDataList) {
+        return Result.success(personTrackService.batchImportTrackPoints(trackDataList));
+    }
+
+    @GetMapping("/track/db-stats")
+    public Result<Map<String, Object>> getTrackDatabaseStats() {
+        return Result.success(personTrackService.getTrackDatabaseStats());
+    }
+
+    @PostMapping("/track/clean-old")
+    public Result<Map<String, Object>> cleanOldTrackPoints(
+            @RequestParam(defaultValue = "90") int days,
+            @RequestParam(defaultValue = "10000") int limit) {
+        int cleaned = personTrackPointMapper.cleanOldTrackPoints(days, limit);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("cleaned", cleaned);
+        result.put("message", "已清理" + cleaned + "条超过" + days + "天的历史轨迹数据");
+        return Result.success(result);
+    }
+
+    // ============================ 模型训练与评估 ============================
+
+    @PostMapping("/model/train")
+    public Result<Map<String, Object>> createTrainingJob(
+            @RequestParam(required = false) String modelType,
+            @RequestParam(required = false, defaultValue = "90") int historyDays,
+            @RequestParam(required = false) String triggerMode) {
+        return Result.success(modelTrainingService.createTrainingJob(modelType, historyDays, triggerMode));
+    }
+
+    @GetMapping("/model/list")
+    public Result<Map<String, Object>> listTrainingJobs(
+            @RequestParam(required = false) String modelType,
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("list", modelTrainingService.listTrainingJobs(modelType, pageNum, pageSize));
+        result.put("total", modelTrainingService.countTrainingJobs(modelType));
+        result.put("pageNum", pageNum);
+        result.put("pageSize", pageSize);
+        return Result.success(result);
+    }
+
+    @GetMapping("/model/{jobId}")
+    public Result<com.police.vision.control.entity.ModelTrainingJob> getTrainingJob(
+            @PathVariable String jobId) {
+        return Result.success(modelTrainingService.getTrainingJob(jobId));
+    }
+
+    @PostMapping("/model/deploy/{modelVersion}")
+    public Result<Map<String, Object>> deployModel(@PathVariable String modelVersion) {
+        return Result.success(modelTrainingService.deployModel(modelVersion));
+    }
+
+    @GetMapping("/model/info")
+    public Result<Map<String, Object>> getLatestModelInfo(
+            @RequestParam(required = false) String modelType) {
+        return Result.success(modelTrainingService.getLatestModelInfo(modelType));
+    }
+
+    // ============================ 聚集数据同步 ============================
+
+    @PostMapping("/predict-alert/sync-crowd")
+    public Result<Map<String, Object>> syncCrowdDataFromAggregation() {
+        int updated = predictionAlertService.syncCrowdDataFromAggregation();
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("updated", updated);
+        result.put("message", "已同步" + updated + "条预警的真实聚集数据");
+        return Result.success(result);
     }
 }

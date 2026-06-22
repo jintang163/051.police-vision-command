@@ -53,6 +53,10 @@ public class MqConstant {
     public static final String TAG_VEHICLE_FOLLOW = "vehicle_follow";
     public static final String TAG_VEHICLE_NIGHT = "vehicle_night";
 
+    public static final String TAG_PREDICTION_ALERT = "prediction_alert";
+    public static final String TAG_PREDICTION_RESULT = "prediction_result";
+    public static final String TAG_MODEL_TRAIN_RESULT = "model_train_result";
+
     public static final String KAFKA_TOPIC_TRAFFIC_CAPTURE = "traffic-capture-topic";
     public static final String KAFKA_TOPIC_VEHICLE_CONTROL_ALERT = "vehicle-control-alert-topic";
     public static final String KAFKA_TOPIC_VEHICLE_TRACK = "vehicle-track-topic";

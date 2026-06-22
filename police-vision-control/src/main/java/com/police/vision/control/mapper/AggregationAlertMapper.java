@@ -17,5 +17,8 @@ public interface AggregationAlertMapper extends BaseMapper<AggregationAlert> {
 
     List<AggregationAlert> selectByAreaCode(@Param("areaCode") String areaCode);
 
-    List<AggregationAlert> selectByTimeRange(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+    List<AggregationAlert> selectByTimeRange(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("status") Integer status);
 }

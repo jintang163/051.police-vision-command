@@ -15,9 +15,20 @@
     </select>
 
     <select id="selectByTimeRange" resultType="com.police.vision.control.entity.AggregationAlert">
-        SELECT * FROM aggregation_alert
-        WHERE alert_time BETWEEN #{start} AND #{end} AND deleted = 0
-        ORDER BY alert_time DESC
+        SELECT 
+            id, alert_id, alert_no, area_code, area_name, center_longitude, center_latitude,
+            person_count, person_count AS total_person_count, person_ids, person_names,
+            target_person_count, target_person_ids, target_person_names, alert_level,
+            start_time, end_time, duration_seconds, camera_ids, snapshot_urls,
+            status, status_name, description, handle_remark, handle_officer_id,
+            handle_time, police_station_code, police_station_name, create_time, update_time
+        FROM aggregation_alert
+        WHERE start_time BETWEEN #{start} AND #{end}
+          AND deleted = 0
+          <if test="status != null">
+              AND status = #{status}
+          </if>
+        ORDER BY start_time DESC
     </select>
 
 </mapper>

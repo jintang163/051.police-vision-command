@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.police.vision.control.mapper.PredictionAlertMapper">
+
+    <select id="selectByAlertId" resultType="com.police.vision.control.entity.PredictionAlert">
+        SELECT
+            id, alert_id, alert_no, alert_type, alert_type_name, alert_level, person_id, person_name,
+            person_type, control_level, longitude, latitude, location_desc, probability, predict_time,
+            prediction_id, prediction_batch, trigger_reason, sensitive_area_name, sensitive_area_type,
+            crowd_count, target_person_count, nearby_police_ids, status, status_name, handle_remark,
+            handle_officer_id, handle_officer_name, handle_time, police_station_code, police_station_name,
+            extra_data, create_time, update_time
+        FROM prediction_alert
+        WHERE alert_id = #{alertId}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectByStatus" resultType="com.police.vision.control.entity.PredictionAlert">
+        SELECT
+            id, alert_id, alert_no, alert_type, alert_type_name, alert_level, person_id, person_name,
+            longitude, latitude, location_desc, probability, predict_time, status, status_name,
+            create_time, update_time
+        FROM prediction_alert
+        WHERE status = #{status}
+          AND deleted = 0
+        ORDER BY alert_level DESC, create_time DESC
+    </select>
+
+    <select id="selectByPersonId" resultType="com.police.vision.control.entity.PredictionAlert">
+        SELECT
+            id, alert_id, alert_no, alert_type, alert_type_name, alert_level, person_id, person_name,
+            longitude, latitude, location_desc, probability, predict_time, status, status_name,
+            create_time, update_time
+        FROM prediction_alert
+        WHERE person_id = #{personId}
+          AND deleted = 0
+        ORDER BY create_time DESC
+        LIMIT 100
+    </select>
+
+    <select id="selectByTimeRange" resultType="com.police.vision.control.entity.PredictionAlert">
+        SELECT
+            id, alert_id, alert_no, alert_type, alert_type_name, alert_level, person_id, person_name,
+            longitude, latitude, location_desc, probability, predict_time, status, status_name,
+            crowd_count, target_person_count, create_time
+        FROM prediction_alert
+        WHERE create_time BETWEEN #{startTime} AND #{endTime}
+          <if test="alertLevel != null">
+              AND alert_level >= #{alertLevel}
+          </if>
+          AND deleted = 0
+        ORDER BY alert_level DESC, create_time DESC
+    </select>
+
+    <select id="selectUnhandledHighRisk" resultType="com.police.vision.control.entity.PredictionAlert">
+        SELECT
+            id, alert_id, alert_no, alert_type, alert_type_name, alert_level, person_id, person_name,
+            longitude, latitude, location_desc, probability, predict_time, status, status_name,
+            police_station_code, police_station_name, create_time
+        FROM prediction_alert
+        WHERE status IN (0, 1)
+          AND alert_level >= #{alertLevel}
+          AND deleted = 0
+        ORDER BY alert_level DESC, create_time DESC
+        LIMIT 50
+    </select>
+
+    <update id="updateCrowdDataFromAggregation">
+        UPDATE prediction_alert pa
+        INNER JOIN aggregation_alert aa ON
+            ST_Distance_Sphere(POINT(pa.longitude, pa.latitude), POINT(aa.center_longitude, aa.center_latitude)) &lt;= 500
+            AND aa.create_time BETWEEN DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND NOW()
+            AND aa.deleted = 0
+        SET
+            pa.crowd_count = aa.total_person_count,
+            pa.target_person_count = aa.target_person_count,
+            pa.alert_level = CASE
+                WHEN aa.total_person_count >= 50 THEN GREATEST(pa.alert_level, 4)
+                WHEN aa.total_person_count >= 30 THEN GREATEST(pa.alert_level, 3)
+                WHEN aa.total_person_count >= 15 THEN GREATEST(pa.alert_level, 2)
+                ELSE pa.alert_level
+            END,
+            pa.update_time = NOW()
+        WHERE pa.status IN (0, 1)
+          AND pa.crowd_count = 0
+          AND pa.deleted = 0
+    </update>
+
+</mapper>

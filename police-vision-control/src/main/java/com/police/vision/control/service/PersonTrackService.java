@@ -1,5 +1,6 @@
 package com.police.vision.control.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.police.vision.common.entity.GpsLocation;
 import com.police.vision.control.entity.PersonTrackPoint;
 import com.police.vision.control.entity.TargetPerson;
@@ -126,5 +127,115 @@ public class PersonTrackService {
         result.put("hotspots", hotspots);
         result.put("timeDistribution", timeDistribution);
         return result;
+    }
+
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> batchImportTrackPoints(List<Map<String, Object>> trackDataList) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (trackDataList == null || trackDataList.isEmpty()) {
+            result.put("success", false);
+            result.put("message", "数据为空");
+            result.put("imported", 0);
+            return result;
+        }
+
+        List<PersonTrackPoint> points = new ArrayList<>();
+        Set<String> personIds = new HashSet<>();
+        int batchSize = 1000;
+        int totalImported = 0;
+
+        for (Map<String, Object> data : trackDataList) {
+            try {
+                String personId = (String) data.get("personId");
+                if (personId == null || personId.isEmpty()) continue;
+
+                TargetPerson person = targetPersonMapper.selectByPersonId(personId);
+                if (person == null) continue;
+
+                PersonTrackPoint point = new PersonTrackPoint();
+                point.setTrackId(UUID.randomUUID().toString().replace("-", ""));
+                point.setPersonId(personId);
+                point.setPersonName(person.getPersonName());
+                point.setLongitude(new BigDecimal(data.get("longitude").toString()));
+                point.setLatitude(new BigDecimal(data.get("latitude").toString()));
+                point.setSpeed(data.get("speed") != null ? new BigDecimal(data.get("speed").toString()) : null);
+                point.setDirection(data.get("direction") != null ? new BigDecimal(data.get("direction").toString()) : null);
+                point.setSourceType(data.get("sourceType") != null ? (String) data.get("sourceType") : "GPS");
+                point.setDeviceId(data.get("deviceId") != null ? (String) data.get("deviceId") : null);
+                point.setLocationType(data.get("locationType") != null ? (String) data.get("locationType") : "GPS");
+
+                Object gpsTimeObj = data.get("gpsTime");
+                if (gpsTimeObj instanceof LocalDateTime) {
+                    point.setGpsTime((LocalDateTime) gpsTimeObj);
+                } else if (gpsTimeObj != null) {
+                    point.setGpsTime(LocalDateTime.parse(gpsTimeObj.toString()));
+                } else {
+                    point.setGpsTime(LocalDateTime.now());
+                }
+
+                points.add(point);
+                personIds.add(personId);
+
+                if (points.size() >= batchSize) {
+                    totalImported += trackPointMapper.batchInsertTrackPoints(points);
+                    points.clear();
+                }
+            } catch (Exception e) {
+                log.warn("导入轨迹点失败，跳过: {}", e.getMessage());
+            }
+        }
+
+        if (!points.isEmpty()) {
+            totalImported += trackPointMapper.batchInsertTrackPoints(points);
+        }
+
+        for (String personId : personIds) {
+            try {
+                LambdaQueryWrapper<PersonTrackPoint> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(PersonTrackPoint::getPersonId, personId);
+                wrapper.orderByDesc(PersonTrackPoint::getGpsTime);
+                wrapper.last("limit 1");
+                PersonTrackPoint latest = trackPointMapper.selectOne(wrapper);
+                if (latest != null) {
+                    TargetPerson person = targetPersonMapper.selectByPersonId(personId);
+                    if (person != null) {
+                        person.setLongitude(latest.getLongitude());
+                        person.setLatitude(latest.getLatitude());
+                        targetPersonMapper.updateById(person);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("更新人员最新位置失败: personId={}", personId, e);
+            }
+        }
+
+        int cleaned = trackPointMapper.cleanOldTrackPoints(90, 10000);
+
+        result.put("success", true);
+        result.put("imported", totalImported);
+        result.put("uniquePersons", personIds.size());
+        result.put("cleanedOld", cleaned);
+        result.put("message", "成功导入" + totalImported + "条轨迹数据，涉及" + personIds.size() + "名重点人员");
+        log.info("批量导入轨迹数据完成: imported={}, persons={}", totalImported, personIds.size());
+        return result;
+    }
+
+    public Map<String, Object> getTrackDatabaseStats() {
+        Map<String, Object> stats = new LinkedHashMap<>();
+        long totalPoints = trackPointMapper.selectCount(null);
+        stats.put("totalPoints", totalPoints);
+
+        List<Map<String, Object>> personStats = trackPointMapper.getTrackStatistics("ALL", 90);
+        stats.put("personStats", personStats);
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime ninetyDaysAgo = now.minusDays(90);
+        LambdaQueryWrapper<PersonTrackPoint> wrapper = new LambdaQueryWrapper<>();
+        wrapper.ge(PersonTrackPoint::getGpsTime, ninetyDaysAgo);
+        long pointsIn90Days = trackPointMapper.selectCount(wrapper);
+        stats.put("pointsIn90Days", pointsIn90Days);
+        stats.put("dataCoverage", totalPoints > 0 ? (double) pointsIn90Days / totalPoints : 0);
+
+        return stats;
     }
 }

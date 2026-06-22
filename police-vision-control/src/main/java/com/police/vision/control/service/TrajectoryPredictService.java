@@ -26,8 +26,10 @@ public class TrajectoryPredictService {
     private final TargetPersonMapper targetPersonMapper;
     private final TrajectoryPredictionMapper predictionMapper;
     private final GeoFenceService geoFenceService;
+    private final ModelTrainingService modelTrainingService;
+    private final com.police.vision.control.client.LstmTrajectoryClient lstmTrajectoryClient;
+    private final com.police.vision.control.config.ControlAiConfig aiConfig;
 
-    private static final String MODEL_VERSION = "lstm-v2.1-90d";
     private static final int HISTORY_DAYS = 90;
     private static final int PREDICT_MINUTES = 30;
     private static final int TOP_K = 3;
@@ -41,6 +43,11 @@ public class TrajectoryPredictService {
         if (person == null) {
             throw new IllegalArgumentException("重点人员不存在: " + personId);
         }
+
+        Map<String, Object> modelInfo = modelTrainingService.getLatestModelInfo("LSTM");
+        String modelVersion = (String) modelInfo.get("modelVersion");
+        Double accuracyEstimate = (Double) modelInfo.get("accuracyEstimate");
+
         List<PersonTrackPoint> historyPoints = trackPointMapper.selectRecentByPersonId(
                 personId, HISTORY_DAYS, 50000);
 
@@ -49,8 +56,18 @@ public class TrajectoryPredictService {
         LocalDateTime windowStart = predictTime.plusMinutes(5);
         LocalDateTime windowEnd = predictTime.plusMinutes(predictMinutes);
 
-        List<Map<String, Object>> predictions = buildPredictions(
-                person, historyPoints, predictTime, windowStart, windowEnd, topK);
+        Map<String, Object> inferenceResult = lstmTrajectoryClient.predict(
+                personId, historyPoints, predictMinutes, topK);
+
+        List<Map<String, Object>> predictions;
+        if (inferenceResult != null && inferenceResult.get("predictions") != null) {
+            predictions = (List<Map<String, Object>>) inferenceResult.get("predictions");
+            modelVersion = inferenceResult.get("model_version") != null ?
+                    (String) inferenceResult.get("model_version") : modelVersion;
+        } else {
+            predictions = buildPredictions(
+                    person, historyPoints, predictTime, windowStart, windowEnd, topK);
+        }
 
         List<TrajectoryPrediction> saved = new ArrayList<>();
         int rank = 1;
@@ -74,8 +91,9 @@ public class TrajectoryPredictService {
             tp.setIsSensitiveArea((Integer) pred.getOrDefault("isSensitiveArea", 0));
             tp.setSensitiveAreaType((String) pred.getOrDefault("sensitiveAreaType", ""));
             tp.setCrowdRiskLevel((Integer) pred.getOrDefault("crowdRiskLevel", 0));
-            tp.setModelVersion(MODEL_VERSION);
-            tp.setConfidence((Double) pred.getOrDefault("confidence", 0.75));
+            tp.setModelVersion(modelVersion);
+            tp.setConfidence(pred.get("confidence") != null ?
+                    (Double) pred.get("confidence") : accuracyEstimate);
             tp.setStatus(1);
             predictionMapper.insert(tp);
             saved.add(tp);
@@ -86,13 +104,15 @@ public class TrajectoryPredictService {
         result.put("personId", personId);
         result.put("personName", person.getPersonName());
         result.put("predictionBatch", batchId);
-        result.put("modelVersion", MODEL_VERSION);
+        result.put("modelVersion", modelVersion);
         result.put("predictTime", predictTime);
         result.put("predictWindowStart", windowStart);
         result.put("predictWindowEnd", windowEnd);
         result.put("historySampleCount", historyPoints.size());
         result.put("predictions", saved);
-        result.put("accuracyEstimate", 0.75);
+        result.put("accuracyEstimate", accuracyEstimate);
+        result.put("modelInfo", modelInfo);
+        result.put("usedRealInference", inferenceResult != null && !Boolean.TRUE.equals(inferenceResult.get("used_simulated")));
         return result;
     }
 

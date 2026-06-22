@@ -27,6 +27,8 @@ public class AggregationAlert extends BaseEntity {
 
     private Integer personCount;
 
+    private Integer totalPersonCount;
+
     private String personIds;
 
     private String personNames;
