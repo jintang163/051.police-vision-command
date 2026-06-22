@@ -26,6 +26,9 @@ public class ControlController {
     private final TargetPersonAlertService alertService;
     private final com.police.vision.control.mapper.TargetPersonMapper targetPersonMapper;
     private final com.police.vision.control.mapper.AggregationAlertMapper aggregationAlertMapper;
+    private final com.police.vision.control.service.PersonTrackService personTrackService;
+    private final com.police.vision.control.service.TrajectoryPredictService trajectoryPredictService;
+    private final com.police.vision.control.service.PredictionAlertService predictionAlertService;
 
     // ============================ 重点人员库 ============================
 
@@ -291,5 +294,133 @@ public class ControlController {
         resp.put("location", Map.of("lng", longitude, "lat", latitude));
         resp.put("timestamp", System.currentTimeMillis());
         return Result.success(resp);
+    }
+
+    // ============================ 轨迹历史 ============================
+
+    @PostMapping("/track/add")
+    public Result<Map<String, Object>> addTrackPoint(
+            @RequestParam String personId,
+            @RequestParam BigDecimal longitude,
+            @RequestParam BigDecimal latitude,
+            @RequestParam(required = false) BigDecimal speed,
+            @RequestParam(required = false) BigDecimal direction,
+            @RequestParam(required = false, defaultValue = "GPS") String sourceType,
+            @RequestParam(required = false) String deviceId) {
+        return Result.success(Map.of(
+                "added", personTrackService.addTrackPoint(personId, longitude, latitude,
+                        speed, direction, sourceType, deviceId).size()
+        ));
+    }
+
+    @GetMapping("/track/history/{personId}")
+    public Result<List<?>> getTrackHistory(
+            @PathVariable String personId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+        return Result.success(personTrackService.getPersonTrackHistory(personId, startTime, endTime));
+    }
+
+    @GetMapping("/track/recent/{personId}")
+    public Result<List<?>> getRecentTrack(
+            @PathVariable String personId,
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(defaultValue = "1000") int limit) {
+        return Result.success(personTrackService.getRecentTrack(personId, days, limit));
+    }
+
+    @GetMapping("/track/activity-pattern/{personId}")
+    public Result<Map<String, Object>> getActivityPattern(
+            @PathVariable String personId,
+            @RequestParam(defaultValue = "90") int days) {
+        return Result.success(personTrackService.analyzeActivityPattern(personId, days));
+    }
+
+    // ============================ 轨迹预测（LSTM） ============================
+
+    @PostMapping("/predict/trajectory/{personId}")
+    public Result<Map<String, Object>> predictTrajectory(@PathVariable String personId) {
+        return Result.success(trajectoryPredictService.predictTrajectory(personId));
+    }
+
+    @PostMapping("/predict/trajectory/batch")
+    public Result<Map<String, Object>> predictBatch(@RequestBody List<String> personIds) {
+        return Result.success(trajectoryPredictService.predictBatch(personIds));
+    }
+
+    @GetMapping("/predict/latest/{personId}")
+    public Result<List<?>> getLatestPredictions(
+            @PathVariable String personId,
+            @RequestParam(defaultValue = "3") int limit) {
+        return Result.success(trajectoryPredictService.getLatestPredictions(personId, limit));
+    }
+
+    @GetMapping("/predict/high-risk")
+    public Result<List<?>> getHighRiskPredictions(
+            @RequestParam(required = false) Double minProbability,
+            @RequestParam(required = false) Integer sensitiveOnly,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+        return Result.success(trajectoryPredictService.getHighRiskPredictions(
+                minProbability, sensitiveOnly, startTime, endTime));
+    }
+
+    // ============================ 预测预警 ============================
+
+    @PostMapping("/predict-alert/generate/{predictionBatch}")
+    public Result<List<?>> generateAlerts(@PathVariable String predictionBatch) {
+        return Result.success(predictionAlertService.generateAlertsFromPredictions(predictionBatch));
+    }
+
+    @GetMapping("/predict-alert/page")
+    public Result<Map<String, Object>> pagePredictionAlerts(
+            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) String personId,
+            @RequestParam(required = false) Integer alertLevel,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("list", predictionAlertService.listAlerts(
+                status, personId, alertLevel, startTime, endTime, pageNum, pageSize));
+        result.put("total", predictionAlertService.countAlerts(
+                status, personId, alertLevel, startTime, endTime));
+        result.put("pageNum", pageNum);
+        result.put("pageSize", pageSize);
+        return Result.success(result);
+    }
+
+    @PostMapping("/predict-alert/handle/{alertId}")
+    public Result<Map<String, Object>> handlePredictionAlert(
+            @PathVariable String alertId,
+            @RequestParam(required = false) Integer targetStatus,
+            @RequestParam(required = false) String statusName,
+            @RequestParam(required = false) String remark,
+            @RequestParam(required = false) Long officerId,
+            @RequestParam(required = false) String officerName) {
+        return Result.success(Map.of(
+                "handled", predictionAlertService.handleAlert(
+                        alertId, targetStatus, statusName, remark, officerId, officerName)
+        ));
+    }
+
+    @PostMapping("/predict-alert/auto-dispatch/{alertId}")
+    public Result<Map<String, Object>> autoDispatchPolice(@PathVariable String alertId) {
+        return Result.success(predictionAlertService.autoDispatchPolice(alertId));
+    }
+
+    @GetMapping("/predict-alert/stats")
+    public Result<Map<String, Object>> getPredictionAlertStats() {
+        return Result.success(predictionAlertService.getAlertStats());
+    }
+
+    // ============================ 敏感区域检测 ============================
+
+    @GetMapping("/sensitive/check")
+    public Result<Map<String, Object>> checkSensitiveArea(
+            @RequestParam double lng,
+            @RequestParam double lat) {
+        return Result.success(fenceService.checkSensitiveArea(lng, lat));
     }
 }

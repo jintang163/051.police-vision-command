@@ -19,12 +19,14 @@ import {
   FileTextOutlined,
   VideoCameraOutlined,
   EnvironmentOutlined,
-  ThunderboltOutlined
+  ThunderboltOutlined,
+  RadarChartOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { SecEvent, PoliceForce, Camera } from '@/types';
 import { getEventDetail } from '@/services/eventApi';
 import EmergencyCommandPanel from './EmergencyCommandPanel';
+import TrajectoryPredictionPanel from './TrajectoryPredictionPanel';
 
 declare global {
   interface Window {
@@ -407,6 +409,15 @@ const EventDetail: React.FC<EventDetailProps> = ({
           应急调度
         </span>
       )
+    },
+    {
+      key: 'trajectory',
+      label: (
+        <span>
+          <RadarChartOutlined />
+          轨迹预测
+        </span>
+      )
     }
   ];
 
@@ -760,6 +771,14 @@ const EventDetail: React.FC<EventDetailProps> = ({
           eventId={String(eventId)}
           eventName={eventData?.name}
           eventLevel={eventData?.securityLevel}
+        />
+      )}
+
+      {activeTab === 'trajectory' && (
+        <TrajectoryPredictionPanel
+          eventId={String(eventId)}
+          eventLng={eventData?.longitude as any}
+          eventLat={eventData?.latitude as any}
         />
       )}
     </div>

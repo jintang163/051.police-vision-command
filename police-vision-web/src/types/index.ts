@@ -892,3 +892,152 @@ export interface PlanConfig {
   requiredResources: PlanRequiredResources;
   commandTemplates: any[];
 }
+
+export interface PersonTrackPoint {
+  trackId: string;
+  personId: string;
+  personName?: string;
+  longitude: number;
+  latitude: number;
+  altitude?: number;
+  speed?: number;
+  direction?: number;
+  accuracy?: number;
+  sourceType?: string;
+  deviceId?: string;
+  gpsTime: string;
+  locationType?: string;
+  locationDesc?: string;
+  extraData?: string;
+  createTime?: string;
+}
+
+export interface TrajectoryPrediction {
+  predictionId: string;
+  personId: string;
+  personName?: string;
+  predictionBatch: string;
+  predictionRank: number;
+  longitude: number;
+  latitude: number;
+  locationDesc?: string;
+  probability: number;
+  predictMinutesAhead: number;
+  predictTime: string;
+  predictWindowStart: string;
+  predictWindowEnd: string;
+  areaCode?: string;
+  areaName?: string;
+  isSensitiveArea: number;
+  sensitiveAreaType?: string;
+  crowdRiskLevel: number;
+  modelVersion: string;
+  confidence?: number;
+  status?: number;
+}
+
+export interface TrajectoryPredictResult {
+  personId: string;
+  personName: string;
+  predictionBatch: string;
+  modelVersion: string;
+  predictTime: string;
+  predictWindowStart: string;
+  predictWindowEnd: string;
+  historySampleCount: number;
+  predictions: TrajectoryPrediction[];
+  accuracyEstimate: number;
+}
+
+export interface PredictionAlert {
+  alertId: string;
+  alertNo: string;
+  alertType: 'SENSITIVE_AREA' | 'CROWD_GATHERING' | 'SENSITIVE_CROWD';
+  alertTypeName: string;
+  alertLevel: number;
+  personId: string;
+  personName: string;
+  personType?: string;
+  controlLevel?: number;
+  longitude: number;
+  latitude: number;
+  locationDesc?: string;
+  probability: number;
+  predictTime: string;
+  predictionId?: string;
+  predictionBatch?: string;
+  triggerReason?: string;
+  sensitiveAreaName?: string;
+  sensitiveAreaType?: string;
+  crowdCount?: number;
+  targetPersonCount?: number;
+  nearbyPoliceIds?: string;
+  status: number;
+  statusName: string;
+  handleRemark?: string;
+  handleOfficerId?: number;
+  handleOfficerName?: string;
+  handleTime?: string;
+  policeStationCode?: string;
+  policeStationName?: string;
+  createTime?: string;
+}
+
+export interface PredictionAlertStats {
+  todayTotal: number;
+  pendingCount: number;
+  processingCount: number;
+  handledCount: number;
+  highRiskCount: number;
+  typeDistribution: Record<string, number>;
+}
+
+export interface SensitiveAreaCheckResult {
+  inSensitiveArea: boolean;
+  sensitiveAreaCount: number;
+  distanceMinMeters?: number;
+  areaId?: string;
+  areaName?: string;
+  areaType?: string;
+  areaLevel?: number;
+}
+
+export interface ActivityPattern {
+  sampleCount: number;
+  hotspots: Array<{
+    longitude: number;
+    latitude: number;
+    count: number;
+    ratio: number;
+  }>;
+  timeDistribution: Record<string, number>;
+}
+
+export interface TargetPerson {
+  personId: string;
+  personName: string;
+  idCardNo?: string;
+  controlLevel?: number;
+  status?: number;
+  remark?: string;
+  personType?: string;
+  personTypeName?: string;
+  gender?: string;
+  age?: number;
+  phone?: string;
+  avatarUrl?: string;
+  longitude?: number;
+  latitude?: number;
+  residentAddress?: string;
+  workAddress?: string;
+  policeStationCode?: string;
+  policeStationName?: string;
+  registerDate?: string;
+  caseCount?: number;
+  visitCount?: number;
+  alertCount?: number;
+  riskScore?: number;
+  criminalTags?: string;
+  mentalLevel?: string;
+  appealCategory?: string;
+}

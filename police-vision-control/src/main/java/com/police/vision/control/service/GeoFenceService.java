@@ -416,4 +416,59 @@ public class GeoFenceService {
         fenceAlertMapper.updateById(alert);
         log.info("电子围栏告警已处理：alertId={}, officerId={}", alertId, officerId);
     }
+
+    public Map<String, Object> checkSensitiveArea(double lng, double lat) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("inSensitiveArea", false);
+        result.put("sensitiveAreaCount", 0);
+        result.put("distanceMinMeters", null);
+        result.put("areaId", null);
+        result.put("areaName", null);
+        result.put("areaType", null);
+        result.put("areaLevel", null);
+
+        try {
+            LambdaQueryWrapper<GeoFence> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(GeoFence::getEnabled, true);
+            wrapper.in(GeoFence::getFenceType, "SENSITIVE", "GOVERNMENT", "SCHOOL", "HOSPITAL", "STATION", "CROWD");
+            List<GeoFence> fences = geoFenceMapper.selectList(wrapper);
+
+            GeoFence matched = null;
+            double minDistance = Double.MAX_VALUE;
+
+            for (GeoFence fence : fences) {
+                boolean inside = false;
+                double dist = 0;
+
+                if (fence.getRadius() != null && fence.getCenterLongitude() != null && fence.getCenterLatitude() != null) {
+                    dist = calculateDistance(lat, lng,
+                            fence.getCenterLatitude().doubleValue(),
+                            fence.getCenterLongitude().doubleValue()) * 1000;
+                    inside = dist <= fence.getRadius().doubleValue();
+                } else if (fence.getPolygonPoints() != null && !fence.getPolygonPoints().isEmpty()) {
+                    inside = isPointInPolygon(lng, lat, fence.getPolygonPoints());
+                }
+
+                if (inside) {
+                    if (matched == null || dist < minDistance) {
+                        matched = fence;
+                        minDistance = dist;
+                    }
+                }
+            }
+
+            if (matched != null) {
+                result.put("inSensitiveArea", true);
+                result.put("sensitiveAreaCount", 1);
+                result.put("distanceMinMeters", Math.round(minDistance));
+                result.put("areaId", matched.getFenceId());
+                result.put("areaName", matched.getFenceName());
+                result.put("areaType", matched.getFenceType());
+                result.put("areaLevel", matched.getFenceLevel());
+            }
+        } catch (Exception e) {
+            log.warn("敏感区域检测异常", e);
+        }
+        return result;
+    }
 }
